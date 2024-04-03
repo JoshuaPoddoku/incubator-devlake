@@ -138,7 +138,7 @@ def init_schemas(b: MigrationScriptBuilder):
 
 @migration(20230524181430)
 def add_build_id_as_job_primary_key(b: MigrationScriptBuilder):
-    # NOTE: We can't add a column to the primary key of an existing table
+    # NOTE: We can't add a column to the primary key of an existing table,
     # so we have to drop the primary key constraint first,
     # which is done differently in MySQL and PostgreSQL,
     # and then add the new composite primary key.
@@ -164,9 +164,38 @@ def add_entities_column_to_scope_config(b: MigrationScriptBuilder):
 def add_raw_data_params_table_to_scope(b: MigrationScriptBuilder):
     b.execute(f'''UPDATE _tool_azuredevops_gitrepositories SET _raw_data_table = '_raw_azuredevops_scopes' WHERE 1=1''')
 
+
 @migration(20230802000001, name="rename startTime/finishTime to start_time/finish_time")
 def rename_starttime_and_finishtime_for_job(b: MigrationScriptBuilder):
-    b.execute(f'ALTER TABLE _tool_azuredevops_jobs RENAME COLUMN startTime TO start_time', Dialect.MYSQL, ignore_error=True)
-    b.execute(f'ALTER TABLE _tool_azuredevops_jobs RENAME COLUMN finishTime TO finish_time', Dialect.MYSQL, ignore_error=True)
-    b.execute(f'ALTER TABLE _tool_azuredevops_jobs RENAME COLUMN `startTime` TO start_time', Dialect.POSTGRESQL, ignore_error=True)
-    b.execute(f'ALTER TABLE _tool_azuredevops_jobs RENAME COLUMN `finishTime` TO finish_time', Dialect.POSTGRESQL, ignore_error=True)
+    b.rename_column('_tool_azuredevops_jobs', 'startTime', 'start_time')
+    b.rename_column('_tool_azuredevops_jobs', 'finishTime', 'finish_time')
+
+
+@migration(20230825150421, name="add missing migrations from 0.17 to 0.18")
+def add_missing_migrations_0_17_to_0_18(b: MigrationScriptBuilder):
+    b.rename_column('_tool_azuredevops_gitrepositories', 'transformation_rule_id', 'scope_config_id')
+    b.add_column('_tool_azuredevops_gitrepositories', 'provider', 'varchar(255)')
+
+
+@migration(20231013130200, name="add missing field in _tool_azuredevops_gitrepositoryconfigs")
+def add_missing_field_in_tool_azuredevops_gitrepositoryconfigs(b: MigrationScriptBuilder):
+    b.add_column('_tool_azuredevops_gitrepositoryconfigs', 'connection_id', 'bigint')
+
+
+@migration(20231013130201, name="add missing field in _tool_azuredevops_gitrepositories")
+def add_missing_field_in_tool_azuredevops_gitrepositories(b: MigrationScriptBuilder):
+    b.add_column('_tool_azuredevops_gitrepositories', 'scope_config_id', 'bigint')
+
+
+@migration(20231130163000, name="add queue_time field in _tool_azuredevops_builds")
+def add_queue_time_field_in_tool_azuredevops_builds(b: MigrationScriptBuilder):
+    table = '_tool_azuredevops_builds'
+    b.execute(f'ALTER TABLE {table} ADD COLUMN queue_time timestamptz', Dialect.POSTGRESQL)
+    b.execute(f'ALTER TABLE {table} ADD COLUMN queue_time datetime', Dialect.MYSQL)
+
+
+@migration(20240223170000, name="add updated_date field in _tool_azuredevops_gitrepositories")
+def add_updated_date_field_in_tool_azuredevops_gitrepositories(b: MigrationScriptBuilder):
+    table = "_tool_azuredevops_gitrepositories"
+    b.execute(f'ALTER TABLE {table} add COLUMN updated_date datetime(3) DEFAULT NULL', Dialect.MYSQL)
+    b.execute(f'ALTER TABLE {table} add COLUMN updated_date TIMESTAMPTZ DEFAULT NULL', Dialect.POSTGRESQL)

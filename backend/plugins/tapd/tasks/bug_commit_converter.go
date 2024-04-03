@@ -18,6 +18,10 @@ limitations under the License.
 package tasks
 
 import (
+	"net/url"
+	"reflect"
+	"strings"
+
 	"github.com/apache/incubator-devlake/core/dal"
 	"github.com/apache/incubator-devlake/core/errors"
 	"github.com/apache/incubator-devlake/core/models/domainlayer/crossdomain"
@@ -25,9 +29,6 @@ import (
 	"github.com/apache/incubator-devlake/core/plugin"
 	helper "github.com/apache/incubator-devlake/helpers/pluginhelper/api"
 	"github.com/apache/incubator-devlake/plugins/tapd/models"
-	"net/url"
-	"reflect"
-	"strings"
 )
 
 func ConvertBugCommit(taskCtx plugin.SubTaskContext) errors.Error {
@@ -70,9 +71,9 @@ func ConvertBugCommit(taskCtx plugin.SubTaskContext) errors.Error {
 					IssueId:   issueIdGen.Generate(data.Options.ConnectionId, toolL.BugId),
 					RepoUrl:   repoUrl,
 					CommitSha: toolL.CommitId,
-					Host:      u.Host,
-					Namespace: strings.Split(u.Path, `/`)[1],
-					RepoName:  toolL.HookProjectName,
+					Host:      u.Hostname(),
+					Namespace: getRepoNamespaceFromUrlPath(u.Path),
+					RepoName:  getRepoNameFromUrlPath(u.Path),
 				}
 				results = append(results, issueRepoCommit)
 			}

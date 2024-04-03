@@ -20,11 +20,11 @@ package impl
 import (
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/apache/incubator-devlake/core/context"
 	"github.com/apache/incubator-devlake/core/dal"
 	"github.com/apache/incubator-devlake/core/errors"
+	coreModels "github.com/apache/incubator-devlake/core/models"
 	"github.com/apache/incubator-devlake/core/plugin"
 	helper "github.com/apache/incubator-devlake/helpers/pluginhelper/api"
 	"github.com/apache/incubator-devlake/plugins/jira/api"
@@ -60,7 +60,7 @@ func (p Jira) ScopeConfig() dal.Tabler {
 	return &models.JiraScopeConfig{}
 }
 
-func (p *Jira) Init(basicRes context.BasicRes) errors.Error {
+func (p Jira) Init(basicRes context.BasicRes) errors.Error {
 	api.Init(basicRes, p)
 
 	return nil
@@ -103,6 +103,8 @@ func (p Jira) Name() string {
 
 func (p Jira) SubTaskMetas() []plugin.SubTaskMeta {
 	return []plugin.SubTaskMeta{
+		tasks.CollectBoardFilterBeginMeta,
+
 		tasks.CollectStatusMeta,
 		tasks.ExtractStatusMeta,
 
@@ -123,8 +125,6 @@ func (p Jira) SubTaskMetas() []plugin.SubTaskMeta {
 		tasks.CollectIssueChangelogsMeta,
 		tasks.ExtractIssueChangelogsMeta,
 
-		tasks.CollectAccountsMeta,
-
 		tasks.CollectWorklogsMeta,
 		tasks.ExtractWorklogsMeta,
 
@@ -133,6 +133,11 @@ func (p Jira) SubTaskMetas() []plugin.SubTaskMeta {
 
 		tasks.CollectSprintsMeta,
 		tasks.ExtractSprintsMeta,
+
+		tasks.CollectEpicsMeta,
+		tasks.ExtractEpicsMeta,
+
+		tasks.CollectAccountsMeta,
 
 		tasks.ConvertBoardMeta,
 
@@ -154,8 +159,7 @@ func (p Jira) SubTaskMetas() []plugin.SubTaskMeta {
 		tasks.ExtractAccountsMeta,
 		tasks.ConvertAccountsMeta,
 
-		tasks.CollectEpicsMeta,
-		tasks.ExtractEpicsMeta,
+		tasks.CollectBoardFilterEndMeta,
 	}
 }
 
@@ -209,18 +213,8 @@ func (p Jira) PrepareTaskData(taskCtx plugin.TaskContext, options map[string]int
 		if err != nil {
 			return nil, errors.Default.Wrap(err, fmt.Sprintf("fail to find board: %d", op.BoardId))
 		}
-	}
-
-	if op.BoardId == 0 && op.ScopeId != "" {
-		var jiraBoard models.JiraBoard
-		// get repo from db
-		err = db.First(&jiraBoard, dal.Where(`connection_id = ? and board_id = ?`, connection.ID, op.ScopeId))
-		if err != nil {
-			return nil, errors.Default.Wrap(err, fmt.Sprintf("fail to find board%s", op.ScopeId))
-		}
-		op.BoardId = jiraBoard.BoardId
-		if op.ScopeConfigId == 0 {
-			op.ScopeConfigId = jiraBoard.ScopeConfigId
+		if op.ScopeConfigId == 0 && scope.ScopeConfigId != 0 {
+			op.ScopeConfigId = scope.ScopeConfigId
 		}
 	}
 	if op.ScopeConfig == nil && op.ScopeConfigId != 0 {
@@ -233,6 +227,9 @@ func (p Jira) PrepareTaskData(taskCtx plugin.TaskContext, options map[string]int
 		if err != nil {
 			return nil, errors.BadInput.Wrap(err, "fail to make scopeConfig")
 		}
+	}
+	if op.ScopeConfig == nil && op.ScopeConfigId == 0 {
+		op.ScopeConfig = new(models.JiraScopeConfig)
 	}
 
 	// set default page size
@@ -249,20 +246,15 @@ func (p Jira) PrepareTaskData(taskCtx plugin.TaskContext, options map[string]int
 		ApiClient:      jiraApiClient,
 		JiraServerInfo: *info,
 	}
-	if op.TimeAfter != "" {
-		var timeAfter time.Time
-		timeAfter, err = errors.Convert01(time.Parse(time.RFC3339, op.TimeAfter))
-		if err != nil {
-			return nil, errors.BadInput.Wrap(err, "invalid value for `timeAfter`")
-		}
-		taskData.TimeAfter = &timeAfter
-		logger.Debug("collect data created from %s", timeAfter)
-	}
+
 	return taskData, nil
 }
 
-func (p Jira) MakeDataSourcePipelinePlanV200(connectionId uint64, scopes []*plugin.BlueprintScopeV200, syncPolicy plugin.BlueprintSyncPolicy) (pp plugin.PipelinePlan, sc []plugin.Scope, err errors.Error) {
-	return api.MakeDataSourcePipelinePlanV200(p.SubTaskMetas(), connectionId, scopes, &syncPolicy)
+func (p Jira) MakeDataSourcePipelinePlanV200(
+	connectionId uint64,
+	scopes []*coreModels.BlueprintScope,
+) (pp coreModels.PipelinePlan, sc []plugin.Scope, err errors.Error) {
+	return api.MakeDataSourcePipelinePlanV200(p.SubTaskMetas(), connectionId, scopes)
 }
 
 func (p Jira) RootPkgPath() string {
@@ -295,13 +287,22 @@ func (p Jira) ApiResources() map[string]map[string]plugin.ApiResourceHandler {
 		"connections/:connectionId/proxy/rest/*path": {
 			"GET": api.Proxy,
 		},
+		"connections/:connectionId/test": {
+			"POST": api.TestExistingConnection,
+		},
 		"connections/:connectionId/remote-scopes": {
 			"GET": api.RemoteScopes,
+		},
+		"connections/:connectionId/search-remote-scopes": {
+			"GET": api.SearchRemoteScopes,
 		},
 		"connections/:connectionId/scopes/:scopeId": {
 			"GET":    api.GetScope,
 			"PATCH":  api.UpdateScope,
 			"DELETE": api.DeleteScope,
+		},
+		"connections/:connectionId/scopes/:scopeId/latest-sync-state": {
+			"GET": api.GetScopeLatestSyncState,
 		},
 		"connections/:connectionId/scopes": {
 			"GET": api.GetScopeList,
@@ -311,7 +312,7 @@ func (p Jira) ApiResources() map[string]map[string]plugin.ApiResourceHandler {
 			"POST": api.CreateScopeConfig,
 			"GET":  api.GetScopeConfigList,
 		},
-		"connections/:connectionId/scope-configs/:id": {
+		"connections/:connectionId/scope-configs/:scopeConfigId": {
 			"PATCH":  api.UpdateScopeConfig,
 			"GET":    api.GetScopeConfig,
 			"DELETE": api.DeleteScopeConfig,

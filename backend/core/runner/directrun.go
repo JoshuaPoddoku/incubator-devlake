@@ -26,6 +26,7 @@ import (
 	"os/signal"
 	"runtime"
 	"syscall"
+	"time"
 
 	"github.com/apache/incubator-devlake/core/models"
 	"github.com/apache/incubator-devlake/core/models/migrationscripts"
@@ -36,6 +37,7 @@ import (
 // RunCmd FIXME ...
 func RunCmd(cmd *cobra.Command) {
 	cmd.Flags().StringSliceP("subtasks", "t", nil, "specify what tasks to run, --subtasks=collectIssues,extractIssues")
+	cmd.Flags().BoolP("fullsync", "f", false, "run fullsync")
 	err := cmd.Execute()
 	if err != nil {
 		panic(err)
@@ -47,9 +49,13 @@ func RunCmd(cmd *cobra.Command) {
 // args: command line arguments
 // pluginTask: specific built-in plugin, for example: feishu, jira...
 // options: plugin config
-func DirectRun(cmd *cobra.Command, args []string, pluginTask plugin.PluginTask, options map[string]interface{}) {
+func DirectRun(cmd *cobra.Command, args []string, pluginTask plugin.PluginTask, options map[string]interface{}, timeAfter string) {
 	basicRes := CreateAppBasicRes()
 	tasks, err := cmd.Flags().GetStringSlice("subtasks")
+	if err != nil {
+		panic(err)
+	}
+	fullSync, err := cmd.Flags().GetBool("fullsync")
 	if err != nil {
 		panic(err)
 	}
@@ -84,12 +90,24 @@ func DirectRun(cmd *cobra.Command, args []string, pluginTask plugin.PluginTask, 
 		Options:  options,
 		Subtasks: tasks,
 	}
+	parsedTimeAfter := time.Time{}
+	syncPolicy := models.SyncPolicy{}
+	if timeAfter != "" {
+		parsedTimeAfter, err = time.Parse(time.RFC3339, timeAfter)
+		if err != nil {
+			panic(err)
+		}
+		syncPolicy.TimeAfter = &parsedTimeAfter
+	}
+	syncPolicy.FullSync = fullSync
+
 	err = RunPluginSubTasks(
 		ctx,
 		basicRes,
 		task,
 		pluginTask,
 		nil,
+		&syncPolicy,
 	)
 	if err != nil {
 		panic(err)

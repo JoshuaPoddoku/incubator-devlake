@@ -103,9 +103,10 @@ func ConvertIssues(taskCtx plugin.SubTaskContext) errors.Error {
 				Priority:                jiraIssue.PriorityName,
 				CreatedDate:             &jiraIssue.Created,
 				UpdatedDate:             &jiraIssue.Updated,
-				LeadTimeMinutes:         int64(jiraIssue.LeadTimeMinutes),
+				LeadTimeMinutes:         jiraIssue.LeadTimeMinutes,
 				TimeSpentMinutes:        jiraIssue.SpentMinutes,
 				OriginalProject:         jiraIssue.ProjectName,
+				Component:               jiraIssue.Components,
 			}
 			if jiraIssue.CreatorAccountId != "" {
 				issue.CreatorId = accountIdGen.Generate(data.Options.ConnectionId, jiraIssue.CreatorAccountId)
@@ -150,7 +151,10 @@ func convertURL(api, issueKey string) string {
 	if err != nil {
 		return api
 	}
-	before, _, _ := strings.Cut(u.Path, "/rest/agile/1.0/issue")
+	before, _, found := strings.Cut(u.Path, "/rest/agile/1.0/issue")
+	if !found {
+		before, _, _ = strings.Cut(u.Path, "/rest/api/2/issue")
+	}
 	u.Path = filepath.Join(before, "browse", issueKey)
 	return u.String()
 }

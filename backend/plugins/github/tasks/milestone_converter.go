@@ -36,7 +36,7 @@ func init() {
 }
 
 var ConvertMilestonesMeta = plugin.SubTaskMeta{
-	Name:             "convertMilestones",
+	Name:             "Convert Milestones",
 	EntryPoint:       ConvertMilestones,
 	EnabledByDefault: true,
 	Description:      "Convert tool layer table github_milestones into  domain layer table milestones",
@@ -100,7 +100,7 @@ func ConvertMilestones(taskCtx plugin.SubTaskContext) errors.Error {
 				Name:            response.GithubMilestone.Title,
 				Url:             response.GithubMilestone.URL,
 				Status:          response.GithubMilestone.State,
-				StartedDate:     &response.GithubMilestone.CreatedAt, //GitHub doesn't give us a "start date"
+				StartedDate:     &response.GithubMilestone.GithubCreatedAt, //GitHub doesn't give us a "start date"
 				EndedDate:       response.GithubMilestone.ClosedAt,
 				CompletedDate:   response.GithubMilestone.ClosedAt,
 				OriginalBoardID: domainBoardId,

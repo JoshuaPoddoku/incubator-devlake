@@ -18,26 +18,24 @@ limitations under the License.
 package tasks
 
 import (
-	"time"
-
 	"github.com/apache/incubator-devlake/core/errors"
 	helper "github.com/apache/incubator-devlake/helpers/pluginhelper/api"
 	"github.com/apache/incubator-devlake/plugins/gitlab/models"
 )
 
 type GitlabOptions struct {
-	ConnectionId  uint64                    `mapstructure:"connectionId" json:"connectionId"`
-	ProjectId     int                       `mapstructure:"projectId" json:"projectId"`
-	ScopeConfigId uint64                    `mapstructure:"scopeConfigId" json:"scopeConfigId"`
-	TimeAfter     string                    `mapstructure:"timeAfter" json:"timeAfter"`
-	ScopeConfig   *models.GitlabScopeConfig `mapstructure:"scopeConfig" json:"scopeConfig"`
+	ConnectionId            uint64                    `mapstructure:"connectionId" json:"connectionId"`
+	ProjectId               int                       `mapstructure:"projectId" json:"projectId"`
+	FullName                string                    `mapstructure:"fullName" json:"fullName"`
+	ScopeConfigId           uint64                    `mapstructure:"scopeConfigId" json:"scopeConfigId"`
+	ScopeConfig             *models.GitlabScopeConfig `mapstructure:"scopeConfig" json:"scopeConfig"`
+	helper.CollectorOptions `mapstructure:",squash"`
 }
 
 type GitlabTaskData struct {
 	Options       *GitlabOptions
 	ApiClient     *helper.ApiAsyncClient
 	ProjectCommit *models.GitlabProjectCommit
-	TimeAfter     *time.Time
 	RegexEnricher *helper.RegexEnricher
 }
 
@@ -52,9 +50,6 @@ func DecodeAndValidateTaskOptions(options map[string]interface{}) (*GitlabOption
 	}
 	if op.ConnectionId == 0 {
 		return nil, errors.BadInput.New("connectionId is invalid")
-	}
-	if op.ScopeConfig == nil && op.ScopeConfigId == 0 {
-		op.ScopeConfig = new(models.GitlabScopeConfig)
 	}
 	return &op, nil
 }

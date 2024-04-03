@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/apache/incubator-devlake/core/errors"
 	"github.com/apache/incubator-devlake/core/plugin"
@@ -29,8 +30,31 @@ import (
 	"github.com/apache/incubator-devlake/plugins/bamboo/models"
 )
 
-func CreateRawDataSubTaskArgs(taskCtx plugin.SubTaskContext, rawTable string) (*api.RawDataSubTaskArgs, *BambooTaskData) {
-	data := taskCtx.GetData().(*BambooTaskData)
+const (
+	// https://docs.atlassian.com/atlassian-bamboo/7.2.4/com/atlassian/bamboo/builder/BuildState.html
+	StatusFinished   = "FINISHED"
+	StatusInProgress = "IN_PROGRESS"
+	StatusPending    = "PENDING"
+	StatusQueued     = "QUEUED"
+	StatusNotBuilt   = "NOT_BUILT"
+
+	// https://docs.atlassian.com/atlassian-bamboo/7.2.4/com/atlassian/bamboo/builder/BuildState.html
+	// https://confluence.atlassian.com/bamkb/bamboo-deployment-status-776822787.html
+	ResultSuccess    = "SUCCESS"
+	ResultFailed     = "FAILED"
+	ResultUnknown    = "UNKNOWN"
+	ResultReplaced   = "REPLACED"
+	ResultSkipped    = "SKIPPED"
+	ResultNever      = "NEVER"
+	ResultQueued     = "QUEUED"
+	ResultInProgress = "IN PROGRESS"
+	ResultNotBuilt   = "NOT BUILT"
+
+	ResultSuccessful = "Successful"
+)
+
+func CreateRawDataSubTaskArgs(taskCtx plugin.SubTaskContext, rawTable string) (*api.RawDataSubTaskArgs, *BambooOptions) {
+	data := taskCtx.GetData().(*BambooOptions)
 	filteredData := *data
 	filteredData.Options = &models.BambooOptions{}
 	*filteredData.Options = *data.Options
@@ -85,4 +109,43 @@ func GetResultsResult(res *http.Response) ([]json.RawMessage, errors.Error) {
 		return nil, err
 	}
 	return resData.Results.Result, nil
+}
+
+// getBambooHomePage receive endpoint like "http://127.0.0.1:30001/rest/api/latest/" and return bamboo's homepage like "http://127.0.0.1:30001/"
+func getBambooHomePage(endpoint string) (string, error) {
+	if endpoint == "" {
+		return "", errors.Default.New("empty endpoint")
+	}
+	endpointURL, err := url.Parse(endpoint)
+	if err != nil {
+		return "", err
+	} else {
+		protocol := endpointURL.Scheme
+		host := endpointURL.Host
+		bambooPath, _, _ := strings.Cut(endpointURL.Path, "/rest/api/latest")
+		return fmt.Sprintf("%s://%s%s", protocol, host, bambooPath), nil
+	}
+}
+
+// generateFakeRepoUrl will return a fake url for repo url field.
+func generateFakeRepoUrl(endpoint string, repoId int) (string, error) {
+	if endpoint == "" {
+		return "", errors.Default.New("empty endpoint")
+	}
+	endpointURL, err := url.Parse(endpoint)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("fake://%s/repos/%d", endpointURL.Host, repoId), nil
+}
+
+// covertError will indentify some known errors and transform it to a simple form.
+func covertError(err errors.Error) errors.Error {
+	if err == nil {
+		return nil
+	}
+	if strings.Contains(err.Error(), "has expired") {
+		return errors.Default.New("license has expired")
+	}
+	return err
 }

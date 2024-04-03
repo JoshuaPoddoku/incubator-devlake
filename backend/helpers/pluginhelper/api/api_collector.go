@@ -28,11 +28,13 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/apache/incubator-devlake/core/plugin"
+
 	"github.com/apache/incubator-devlake/core/dal"
 	"github.com/apache/incubator-devlake/core/errors"
-	plugin "github.com/apache/incubator-devlake/core/plugin"
-	"github.com/apache/incubator-devlake/helpers/pluginhelper/common"
 )
+
+var _ plugin.SubTask = (*ApiCollector)(nil)
 
 // Pager contains pagination information for a api request
 type Pager struct {
@@ -84,7 +86,7 @@ type ApiCollectorArgs struct {
 	// NORMALLY, DO NOT SPECIFY THIS PARAMETER, unless you know what it means
 	Concurrency    int
 	ResponseParser func(res *http.Response) ([]json.RawMessage, errors.Error)
-	AfterResponse  common.ApiClientAfterResponse
+	AfterResponse  plugin.ApiClientAfterResponse
 	RequestBody    func(reqData *RequestData) map[string]interface{}
 	Method         string
 }
@@ -158,8 +160,13 @@ func (collector *ApiCollector) Execute() errors.Error {
 		return errors.Default.Wrap(err, "error auto-migrating collector")
 	}
 
+	isIncremental := collector.args.Incremental
+	syncPolicy := collector.args.Ctx.TaskContext().SyncPolicy()
+	if syncPolicy != nil && syncPolicy.FullSync {
+		isIncremental = false
+	}
 	// flush data if not incremental collection
-	if !collector.args.Incremental {
+	if !isIncremental {
 		err = db.Delete(&RawData{}, dal.From(collector.table), dal.Where("params = ?", collector.params))
 		if err != nil {
 			return errors.Default.Wrap(err, "error deleting data from collector")
@@ -241,7 +248,7 @@ func (collector *ApiCollector) exec(input interface{}) {
 		Page: 1,
 		Size: collector.args.PageSize,
 	}
-	// featch the detail
+	// fetch the detail
 	if collector.args.PageSize <= 0 {
 		collector.fetchAsync(reqData, nil)
 		// fetch pages sequentially
@@ -324,7 +331,7 @@ func (collector *ApiCollector) fetchPagesUndetermined(reqData *RequestData) {
 	concurrency := collector.args.Concurrency
 	if concurrency == 0 {
 		// normally when a multi-pages api depends on a another resource, like jira changelogs depend on issue ids
-		// it tend to have less page, like 1 or 2 pages in total
+		// it tends to have less page, like 1 or 2 pages in total
 		if collector.args.Input != nil {
 			concurrency = 2
 		} else {
@@ -381,12 +388,12 @@ func (collector *ApiCollector) generateUrl(pager *Pager, input interface{}) (str
 }
 
 // GetAfterResponse return apiClient's afterResponseFunction
-func (collector *ApiCollector) GetAfterResponse() common.ApiClientAfterResponse {
+func (collector *ApiCollector) GetAfterResponse() plugin.ApiClientAfterResponse {
 	return collector.args.ApiClient.GetAfterFunction()
 }
 
 // SetAfterResponse set apiClient's afterResponseFunction
-func (collector *ApiCollector) SetAfterResponse(f common.ApiClientAfterResponse) {
+func (collector *ApiCollector) SetAfterResponse(f plugin.ApiClientAfterResponse) {
 	collector.args.ApiClient.SetAfterFunction(f)
 }
 
@@ -427,7 +434,7 @@ func (collector *ApiCollector) fetchAsync(reqData *RequestData, handler func(int
 	logger := collector.args.Ctx.GetLogger()
 	logger.Debug("fetchAsync <<< enqueueing for %s %v", apiUrl, apiQuery)
 	responseHandler := func(res *http.Response) errors.Error {
-		defer logger.Debug("fetchAsync >>> done for %s %v %v", apiUrl, apiQuery, collector.args.RequestBody)
+		defer logger.Debug("fetchAsync >>> done for %s %v", apiUrl, apiQuery)
 		logger := collector.args.Ctx.GetLogger()
 		// read body to buffer
 		body, err := io.ReadAll(res.Body)
@@ -484,5 +491,3 @@ func (collector *ApiCollector) fetchAsync(reqData *RequestData, handler func(int
 	}
 	logger.Debug("fetchAsync === enqueued for %s %v", apiUrl, apiQuery)
 }
-
-var _ plugin.SubTask = (*ApiCollector)(nil)

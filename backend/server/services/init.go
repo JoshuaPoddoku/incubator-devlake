@@ -42,7 +42,14 @@ var basicRes context.BasicRes
 var migrator plugin.Migrator
 var cronManager *cron.Cron
 var vld *validator.Validate
+var serviceStatus string
 
+const (
+	SERVICE_STATUS_INIT         = "initializing"
+	SERVICE_STATUS_WAIT_CONFIRM = "waiting for migration confirmation"
+	SERVICE_STATUS_MIGRATING    = "migrating"
+	SERVICE_STATUS_READY        = "ready"
+)
 const failToCreateCronJob = "created cron job failed"
 
 // InitResources creates resources needed by services module
@@ -50,6 +57,7 @@ func InitResources() {
 	var err error
 
 	// basic resources initialization
+	serviceStatus = SERVICE_STATUS_INIT
 	vld = validator.New()
 	basicRes = runner.CreateAppBasicRes()
 	cfg = basicRes.GetConfigReader()
@@ -82,13 +90,8 @@ func Init() {
 	// lock the database to avoid multiple devlake instances from sharing the same one
 	lockDatabase()
 
-	var err error
 	// now, load the plugins
-	err = runner.LoadPlugins(basicRes)
-	if err != nil {
-		logger.Error(err, "failed to load plugins")
-		panic(err)
-	}
+	errors.Must(runner.LoadPlugins(basicRes))
 
 	// pull migration scripts from plugins to migrator
 	for _, pluginInst := range plugin.AllPlugins() {
@@ -98,18 +101,23 @@ func Init() {
 	}
 
 	// check if there are pending migration
-	forceMigration := cfg.GetBool("FORCE_MIGRATION")
-	if !migrator.HasPendingScripts() || forceMigration {
-		err = ExecuteMigration()
-		if err != nil {
-			panic(err)
+	if migrator.HasPendingScripts() {
+		if cfg.GetBool("FORCE_MIGRATION") {
+			errors.Must(ExecuteMigration())
+			logger.Info("db migration without confirmation")
+		} else {
+			serviceStatus = SERVICE_STATUS_WAIT_CONFIRM
+			logger.Info("db migration confirmation needed")
 		}
+	} else {
+		errors.Must(ExecuteMigration())
+		logger.Info("no db migration needed")
 	}
-	logger.Info("Db migration confirmation needed")
 }
 
 // ExecuteMigration executes all pending migration scripts and initialize services module
 func ExecuteMigration() errors.Error {
+	serviceStatus = SERVICE_STATUS_MIGRATING
 	// apply all pending migration scripts
 	err := migrator.Execute()
 	if err != nil {
@@ -119,12 +127,10 @@ func ExecuteMigration() errors.Error {
 	// cronjob for blueprint triggering
 	location := cron.WithLocation(time.UTC)
 	cronManager = cron.New(location)
-	if err != nil {
-		panic(err)
-	}
 
 	// initialize pipeline server, mainly to start the pipeline consuming process
 	pipelineServiceInit()
+	serviceStatus = SERVICE_STATUS_READY
 	return nil
 }
 

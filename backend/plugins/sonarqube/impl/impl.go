@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"time"
 
+	coreModels "github.com/apache/incubator-devlake/core/models"
+
 	"github.com/apache/incubator-devlake/core/dal"
 
 	"github.com/apache/incubator-devlake/core/context"
@@ -82,19 +84,20 @@ func (p Sonarqube) GetTablesInfo() []dal.Tabler {
 		&models.SonarqubeHotspot{},
 		&models.SonarqubeFileMetrics{},
 		&models.SonarqubeAccount{},
+		&models.SonarqubeScopeConfig{},
 	}
 }
 
 func (p Sonarqube) SubTaskMetas() []plugin.SubTaskMeta {
 	return []plugin.SubTaskMeta{
-		tasks.CollectIssuesMeta,
-		tasks.ExtractIssuesMeta,
-		tasks.CollectHotspotsMeta,
-		tasks.ExtractHotspotsMeta,
 		tasks.CollectAdditionalFilemetricsMeta,
 		tasks.ExtractAdditionalFileMetricsMeta,
 		tasks.CollectFilemetricsMeta,
 		tasks.ExtractFilemetricsMeta,
+		tasks.CollectIssuesMeta,
+		tasks.ExtractIssuesMeta,
+		tasks.CollectHotspotsMeta,
+		tasks.ExtractHotspotsMeta,
 		tasks.CollectAccountsMeta,
 		tasks.ExtractAccountsMeta,
 		tasks.ConvertProjectsMeta,
@@ -133,14 +136,13 @@ func (p Sonarqube) PrepareTaskData(taskCtx plugin.TaskContext, options map[strin
 		TaskStartTime: time.Now(),
 	}
 	// even we have project in _tool_sonaqube_projects, we still need to collect project to update LastAnalysisDate
-	var scope models.SonarqubeProject
 	var apiProject *models.SonarqubeApiProject
 	apiProject, err = api.GetApiProject(op.ProjectKey, apiClient)
 	if err != nil {
 		return nil, err
 	}
 	logger.Debug(fmt.Sprintf("Current project: %s", apiProject.ProjectKey))
-	scope = apiProject.ConvertApiScope().(models.SonarqubeProject)
+	scope := apiProject.ConvertApiScope()
 	scope.ConnectionId = op.ConnectionId
 	err = taskCtx.GetDal().CreateOrUpdate(&scope)
 	if err != nil {
@@ -151,7 +153,7 @@ func (p Sonarqube) PrepareTaskData(taskCtx plugin.TaskContext, options map[strin
 	return taskData, nil
 }
 
-// PkgPath information lost when compiled as plugin(.so)
+// RootPkgPath information lost when compiled as plugin(.so)
 func (p Sonarqube) RootPkgPath() string {
 	return "github.com/apache/incubator-devlake/plugins/sonarqube"
 }
@@ -174,6 +176,9 @@ func (p Sonarqube) ApiResources() map[string]map[string]plugin.ApiResourceHandle
 			"PATCH":  api.PatchConnection,
 			"DELETE": api.DeleteConnection,
 		},
+		"connections/:connectionId/test": {
+			"POST": api.TestExistingConnection,
+		},
 		"connections/:connectionId/remote-scopes": {
 			"GET": api.RemoteScopes,
 		},
@@ -189,14 +194,21 @@ func (p Sonarqube) ApiResources() map[string]map[string]plugin.ApiResourceHandle
 			"GET": api.GetScopeList,
 			"PUT": api.PutScope,
 		},
+		"connections/:connectionId/scopes/:scopeId/latest-sync-state": {
+			"GET": api.GetScopeLatestSyncState,
+		},
+
 		"connections/:connectionId/proxy/rest/*path": {
 			"GET": api.Proxy,
 		},
 	}
 }
 
-func (p Sonarqube) MakeDataSourcePipelinePlanV200(connectionId uint64, scopes []*plugin.BlueprintScopeV200, syncPolicy plugin.BlueprintSyncPolicy) (pp plugin.PipelinePlan, sc []plugin.Scope, err errors.Error) {
-	return api.MakeDataSourcePipelinePlanV200(p.SubTaskMetas(), connectionId, scopes, &syncPolicy)
+func (p Sonarqube) MakeDataSourcePipelinePlanV200(
+	connectionId uint64,
+	scopes []*coreModels.BlueprintScope,
+) (pp coreModels.PipelinePlan, sc []plugin.Scope, err errors.Error) {
+	return api.MakeDataSourcePipelinePlanV200(p.SubTaskMetas(), connectionId, scopes)
 }
 
 func (p Sonarqube) Close(taskCtx plugin.TaskContext) errors.Error {

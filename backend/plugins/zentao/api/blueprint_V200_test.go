@@ -18,7 +18,13 @@ limitations under the License.
 package api
 
 import (
+	"database/sql"
 	"testing"
+
+	"github.com/apache/incubator-devlake/core/dal"
+	"gorm.io/gorm/migrator"
+
+	coreModels "github.com/apache/incubator-devlake/core/models"
 
 	"github.com/apache/incubator-devlake/core/models/common"
 	"github.com/apache/incubator-devlake/core/models/domainlayer"
@@ -61,22 +67,21 @@ func TestMakeDataSourcePipelinePlanV200(t *testing.T) {
 	// Refresh Global Variables and set the sql mock
 	mockBasicRes(t)
 
-	bs := &plugin.BlueprintScopeV200{
-		Id: "1",
+	bs := &coreModels.BlueprintScope{
+		ScopeId: "1",
 	}
-	/*bs2 := &plugin.BlueprintScopeV200{
+	/*bs2 := &coreModels.BlueprintScope{
 		Id: "product/1",
 	}*/
-	bpScopes := make([]*plugin.BlueprintScopeV200, 0)
+	bpScopes := make([]*coreModels.BlueprintScope, 0)
 	bpScopes = append(bpScopes, bs)
-	syncPolicy := &plugin.BlueprintSyncPolicy{}
 
-	plan := make(plugin.PipelinePlan, len(bpScopes))
-	plan, scopes, err := makePipelinePlanV200(nil, plan, bpScopes, connection, syncPolicy)
+	plan := make(coreModels.PipelinePlan, len(bpScopes))
+	plan, scopes, err := makePipelinePlanV200(nil, plan, bpScopes, connection)
 	assert.Nil(t, err)
 
-	expectPlan := plugin.PipelinePlan{
-		plugin.PipelineStage{
+	expectPlan := coreModels.PipelinePlan{
+		coreModels.PipelineStage{
 			{
 				Plugin:   "zentao",
 				Subtasks: []string{},
@@ -86,7 +91,7 @@ func TestMakeDataSourcePipelinePlanV200(t *testing.T) {
 				},
 			},
 		},
-		/*plugin.PipelineStage{
+		/*coreModels.PipelineStage{
 			{
 				Plugin:   "zentao",
 				Subtasks: []string{},
@@ -135,12 +140,23 @@ func mockBasicRes(t *testing.T) {
 		ScopeConfigId: 0,
 	}*/
 	testZentaoProject := &models.ZentaoProject{
-		ConnectionId:  1,
-		Id:            1,
-		Name:          "test/testRepo",
-		Type:          `project`,
-		ScopeConfigId: 0,
+		Scope: common.Scope{
+			ConnectionId:  1,
+			ScopeConfigId: 0,
+		},
+		Id:   1,
+		Name: "test/testRepo",
+		Type: `project`,
 	}
+	var testColumTypes = []dal.ColumnMeta{
+		migrator.ColumnType{
+			NameValue: sql.NullString{
+				String: "abc",
+				Valid:  true,
+			},
+		},
+	}
+
 	mockRes := unithelper.DummyBasicRes(func(mockDal *mockdal.Dal) {
 		mockDal.On("First", mock.AnythingOfType("*models.ZentaoProject"), mock.Anything).Run(func(args mock.Arguments) {
 			dst := args.Get(0).(*models.ZentaoProject)
@@ -155,6 +171,12 @@ func mockBasicRes(t *testing.T) {
 		mockDal.On("First", mock.AnythingOfType("*models.ZentaoScopeConfig"), mock.Anything).Run(func(args mock.Arguments) {
 			panic("The empty scope should not call First() for ZentaoScopeConfig")
 		}).Return(nil)
+		mockDal.On("GetColumns", mock.AnythingOfType("models.ZentaoConnection"), mock.Anything).Run(nil).Return(
+			testColumTypes, nil)
+		mockDal.On("GetColumns", mock.AnythingOfType("models.ZentaoProject"), mock.Anything).Run(nil).Return(
+			testColumTypes, nil)
+		mockDal.On("GetColumns", mock.AnythingOfType("models.ZentaoScopeConfig"), mock.Anything).Run(nil).Return(
+			testColumTypes, nil)
 	})
 	p := mockplugin.NewPluginMeta(t)
 	p.On("Name").Return("dummy").Maybe()

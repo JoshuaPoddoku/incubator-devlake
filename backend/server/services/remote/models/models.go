@@ -79,6 +79,16 @@ type DynamicScopeModel struct {
 	models.DynamicTabler
 }
 
+// ScopeScopeConfigId implements plugin.ToolLayerScope.
+func (d DynamicScopeModel) ScopeScopeConfigId() uint64 {
+	return reflect.ValueOf(d.DynamicTabler.Unwrap()).Elem().FieldByName("ScopeConfigId").Uint()
+}
+
+// ScopeConnectionId implements plugin.ToolLayerScope.
+func (d DynamicScopeModel) ScopeConnectionId() uint64 {
+	return d.ConnectionId()
+}
+
 func NewDynamicScopeModel(model models.DynamicTabler) *DynamicScopeModel {
 	return &DynamicScopeModel{
 		DynamicTabler: model.New(),
@@ -138,7 +148,7 @@ type DynamicDomainScope struct {
 }
 
 type PipelineData struct {
-	Plan   plugin.PipelinePlan  `json:"plan"`
+	Plan   models.PipelinePlan  `json:"plan"`
 	Scopes []DynamicDomainScope `json:"scopes"`
 }
 

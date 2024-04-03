@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"path"
 	"reflect"
+	"regexp"
 	"strings"
 
 	"github.com/apache/incubator-devlake/core/dal"
@@ -90,10 +91,10 @@ func getOriginalProject(data *ZentaoTaskData) string {
 // based on the provided ZentaoTaskData. It returns the created map.
 func getBugStatusMapping(data *ZentaoTaskData) map[string]string {
 	stdStatusMappings := make(map[string]string)
-	if data.Options.ScopeConfigs == nil {
+	if data.Options.ScopeConfig == nil {
 		return stdStatusMappings
 	}
-	mapping := data.Options.ScopeConfigs.BugStatusMappings
+	mapping := data.Options.ScopeConfig.BugStatusMappings
 	// Map original status values to standard status values
 	for userStatus, stdStatus := range mapping {
 		stdStatusMappings[userStatus] = strings.ToUpper(stdStatus)
@@ -105,10 +106,10 @@ func getBugStatusMapping(data *ZentaoTaskData) map[string]string {
 // based on the provided ZentaoTaskData. It returns the created map.
 func getStoryStatusMapping(data *ZentaoTaskData) map[string]string {
 	stdStatusMappings := make(map[string]string)
-	if data.Options.ScopeConfigs == nil {
+	if data.Options.ScopeConfig == nil {
 		return stdStatusMappings
 	}
-	mapping := data.Options.ScopeConfigs.StoryStatusMappings
+	mapping := data.Options.ScopeConfig.StoryStatusMappings
 	// Map original status values to standard status values
 	for userStatus, stdStatus := range mapping {
 		stdStatusMappings[userStatus] = strings.ToUpper(stdStatus)
@@ -120,10 +121,10 @@ func getStoryStatusMapping(data *ZentaoTaskData) map[string]string {
 // based on the provided ZentaoTaskData. It returns the created map.
 func getTaskStatusMapping(data *ZentaoTaskData) map[string]string {
 	stdStatusMappings := make(map[string]string)
-	if data.Options.ScopeConfigs == nil {
+	if data.Options.ScopeConfig == nil {
 		return stdStatusMappings
 	}
-	mapping := data.Options.ScopeConfigs.TaskStatusMappings
+	mapping := data.Options.ScopeConfig.TaskStatusMappings
 	// Map original status values to standard status values
 	for userStatus, stdStatus := range mapping {
 		stdStatusMappings[userStatus] = strings.ToUpper(stdStatus)
@@ -135,10 +136,10 @@ func getTaskStatusMapping(data *ZentaoTaskData) map[string]string {
 // It returns the created map.
 func getStdTypeMappings(data *ZentaoTaskData) map[string]string {
 	stdTypeMappings := make(map[string]string)
-	if data.Options.ScopeConfigs == nil {
+	if data.Options.ScopeConfig == nil {
 		return stdTypeMappings
 	}
-	mapping := data.Options.ScopeConfigs.TypeMappings
+	mapping := data.Options.ScopeConfig.TypeMappings
 	// Map user types to standard types
 	for userType, stdType := range mapping {
 		stdTypeMappings[userType] = strings.ToUpper(stdType)
@@ -153,7 +154,7 @@ func parseRepoUrl(repoUrl string) (string, string, string, error) {
 		return "", "", "", err
 	}
 
-	host := parsedUrl.Host
+	host := parsedUrl.Hostname()
 	host = strings.TrimPrefix(host, "www.")
 	pathParts := strings.Split(parsedUrl.Path, "/")
 	if len(pathParts) < 3 {
@@ -179,29 +180,29 @@ func ignoreHTTPStatus404(res *http.Response) errors.Error {
 	return nil
 }
 
-func getProductIterator(taskCtx plugin.SubTaskContext) (dal.Rows, *api.DalCursorIterator, errors.Error) {
-	data := taskCtx.GetData().(*ZentaoTaskData)
-	db := taskCtx.GetDal()
-	clauses := []dal.Clause{
-		dal.Select("id"),
-		dal.From(&models.ZentaoProductSummary{}),
-		dal.Where(
-			"project_id = ? AND connection_id = ?",
-			data.Options.ProjectId, data.Options.ConnectionId,
-		),
-	}
-
-	cursor, err := db.Cursor(clauses...)
-	if err != nil {
-		return nil, nil, err
-	}
-	iterator, err := api.NewDalCursorIterator(db, cursor, reflect.TypeOf(input{}))
-	if err != nil {
-		cursor.Close()
-		return nil, nil, err
-	}
-	return cursor, iterator, nil
-}
+//func getProductIterator(taskCtx plugin.SubTaskContext) (dal.Rows, *api.DalCursorIterator, errors.Error) {
+//	data := taskCtx.GetData().(*ZentaoTaskData)
+//	db := taskCtx.GetDal()
+//	clauses := []dal.Clause{
+//		dal.Select("id"),
+//		dal.From(&models.ZentaoProductSummary{}),
+//		dal.Where(
+//			"project_id = ? AND connection_id = ?",
+//			data.Options.ProjectId, data.Options.ConnectionId,
+//		),
+//	}
+//
+//	cursor, err := db.Cursor(clauses...)
+//	if err != nil {
+//		return nil, nil, err
+//	}
+//	iterator, err := api.NewDalCursorIterator(db, cursor, reflect.TypeOf(input{}))
+//	if err != nil {
+//		cursor.Close()
+//		return nil, nil, err
+//	}
+//	return cursor, iterator, nil
+//}
 
 func getExecutionIterator(taskCtx plugin.SubTaskContext) (dal.Rows, *api.DalCursorIterator, errors.Error) {
 	data := taskCtx.GetData().(*ZentaoTaskData)
@@ -304,4 +305,53 @@ func convertIssueURL(apiURL, issueType string, id int64) string {
 	u.RawQuery = ""
 	u.Path = path.Join(before, fmt.Sprintf("/%s-view-%d.html", issueType, id))
 	return u.String()
+}
+
+func extractIdFromLogComment(logCommentType string, comment string) ([]string, error) {
+	if logCommentType != "task" && logCommentType != "bug" && logCommentType != "story" {
+		return nil, errors.Default.New(fmt.Sprintf("unsupportted log comment type: %s", logCommentType))
+	}
+	regexpStr := fmt.Sprintf("(%s-view-\\d+\\.json)+", logCommentType)
+	re := regexp.MustCompile(regexpStr)
+	results := re.FindAllString(comment, -1)
+	var ret []string
+
+	convertMatchedString := func(s string) string {
+		if s == "" {
+			return s
+		}
+		s = strings.Replace(s, "-", " ", -1)
+		s = strings.Replace(s, ".", " ", -1)
+		return s
+	}
+
+	for _, matched := range results {
+		var id string
+		format := fmt.Sprintf("%s view %%s json", logCommentType)
+		n, err := fmt.Sscanf(convertMatchedString(matched), format, &id)
+		if err != nil {
+			return nil, err
+		}
+		if n < 1 {
+			return nil, errors.Default.New("unexpected comment")
+		}
+		ret = append(ret, id)
+	}
+	return ret, nil
+}
+
+// getZentaoHomePage receive endpoint like "http://54.158.1.10:30001/api.php/v1/" and return zentao's homepage like "http://54.158.1.10:30001/"
+func getZentaoHomePage(endpoint string) (string, error) {
+	if endpoint == "" {
+		return "", errors.Default.New("empty endpoint")
+	}
+	endpointURL, err := url.Parse(endpoint)
+	if err != nil {
+		return "", err
+	} else {
+		protocol := endpointURL.Scheme
+		host := endpointURL.Host
+		zentaoPath, _, _ := strings.Cut(endpointURL.Path, "/api.php/v1")
+		return fmt.Sprintf("%s://%s%s", protocol, host, zentaoPath), nil
+	}
 }

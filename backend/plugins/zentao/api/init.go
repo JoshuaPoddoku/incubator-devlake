@@ -19,6 +19,7 @@ package api
 
 import (
 	"github.com/apache/incubator-devlake/core/context"
+	"github.com/apache/incubator-devlake/core/log"
 	"github.com/apache/incubator-devlake/core/plugin"
 	"github.com/apache/incubator-devlake/helpers/pluginhelper/api"
 	"github.com/apache/incubator-devlake/plugins/zentao/models"
@@ -30,23 +31,21 @@ type MixScopes struct {
 	ZentaoProject *models.ZentaoProject `json:"project"`
 }
 
+var logger log.Logger
 var vld *validator.Validate
 var connectionHelper *api.ConnectionApiHelper
 var projectScopeHelper *api.ScopeApiHelper[models.ZentaoConnection, models.ZentaoProject, models.ZentaoScopeConfig]
-
+var dsHelper *api.DsHelper[models.ZentaoConnection, models.ZentaoProject, models.ZentaoScopeConfig]
 var projectRemoteHelper *api.RemoteApiHelper[models.ZentaoConnection, models.ZentaoProject, models.ZentaoProject, api.BaseRemoteGroupResponse]
 var basicRes context.BasicRes
-var scHelper *api.ScopeConfigHelper[models.ZentaoScopeConfig]
+var scHelper *api.ScopeConfigHelper[models.ZentaoScopeConfig, *models.ZentaoScopeConfig]
 
 func Init(br context.BasicRes, p plugin.PluginMeta) {
 
 	basicRes = br
+	logger = basicRes.GetLogger()
 	vld = validator.New()
-	connectionHelper = api.NewConnectionHelper(
-		basicRes,
-		vld,
-		p.Name(),
-	)
+	connectionHelper = api.NewConnectionHelper(basicRes, vld, p.Name())
 
 	projectParams := &api.ReflectionParameters{
 		ScopeIdFieldName:     "Id",
@@ -64,14 +63,18 @@ func Init(br context.BasicRes, p plugin.PluginMeta) {
 		nil,
 	)
 
-	projectRemoteHelper = api.NewRemoteHelper[models.ZentaoConnection, models.ZentaoProject, models.ZentaoProject, api.BaseRemoteGroupResponse](
-		basicRes,
-		vld,
-		connectionHelper,
-	)
-	scHelper = api.NewScopeConfigHelper[models.ZentaoScopeConfig](
-		basicRes,
-		vld,
+	projectRemoteHelper = api.NewRemoteHelper[models.ZentaoConnection, models.ZentaoProject, models.ZentaoProject, api.BaseRemoteGroupResponse](basicRes, vld, connectionHelper)
+	scHelper = api.NewScopeConfigHelper[models.ZentaoScopeConfig, *models.ZentaoScopeConfig](basicRes, vld, p.Name())
+	dsHelper = api.NewDataSourceHelper[
+		models.ZentaoConnection, models.ZentaoProject, models.ZentaoScopeConfig,
+	](
+		br,
 		p.Name(),
+		[]string{"name"},
+		func(c models.ZentaoConnection) models.ZentaoConnection {
+			return c.Sanitize()
+		},
+		nil,
+		nil,
 	)
 }

@@ -29,8 +29,7 @@ import (
 var _ plugin.ToolLayerScope = (*GitlabProject)(nil)
 
 type GitlabProject struct {
-	ConnectionId            uint64     `json:"connectionId" mapstructure:"connectionId" validate:"required" gorm:"primaryKey"`
-	ScopeConfigId           uint64     `json:"scopeConfigId,omitempty" mapstructure:"scopeConfigId"`
+	common.Scope            `mapstructure:",squash" gorm:"embedded"`
 	GitlabId                int        `json:"gitlabId" mapstructure:"gitlabId" validate:"required" gorm:"primaryKey"`
 	Name                    string     `json:"name" mapstructure:"name" gorm:"type:varchar(255)"`
 	Description             string     `json:"description" mapstructure:"description"`
@@ -47,8 +46,6 @@ type GitlabProject struct {
 	CreatedDate             *time.Time `json:"createdDate" mapstructure:"-"`
 	UpdatedDate             *time.Time `json:"updatedDate" mapstructure:"-"`
 	Archived                bool       `json:"archived" mapstructure:"archived"`
-
-	common.NoPKModel `json:"-" mapstructure:"-"`
 }
 
 func (GitlabProject) TableName() string {
@@ -75,7 +72,7 @@ func (p GitlabProject) ScopeParams() interface{} {
 }
 
 // Convert the API response to our DB model instance
-func (gitlabApiProject GitlabApiProject) ConvertApiScope() plugin.ToolLayerScope {
+func (gitlabApiProject GitlabApiProject) ConvertApiScope() *GitlabProject {
 	p := &GitlabProject{}
 	p.GitlabId = gitlabApiProject.GitlabId
 	p.Name = gitlabApiProject.Name
@@ -118,6 +115,34 @@ type GitlabApiProject struct {
 	LastActivityAt    *common.Iso8601Time `json:"last_activity_at"`
 	HttpUrlToRepo     string              `json:"http_url_to_repo"`
 	Archived          bool                `json:"archived"`
+	Permissions       Permissions         `json:"permissions"`
+	Namespace         struct {
+		ID       int    `json:"id"`
+		Name     string `json:"name"`
+		Path     string `json:"path"`
+		Kind     string `json:"kind"`
+		FullPath string `json:"full_path"`
+		ParentID any    `json:"parent_id"`
+	} `json:"namespace"`
+	Owner struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+	} `json:"owner"`
+}
+
+type Permissions struct {
+	ProjectAccess *ProjectAccess `json:"project_access"`
+	GroupAccess   *GroupAccess   `json:"group_access"`
+}
+
+type ProjectAccess struct {
+	AccessLevel       int `json:"access_level"`
+	NotificationLevel int `json:"notification_level"`
+}
+
+type GroupAccess struct {
+	AccessLevel       int `json:"access_level"`
+	NotificationLevel int `json:"notification_level"`
 }
 
 type GroupResponse struct {
@@ -129,14 +154,6 @@ type GroupResponse struct {
 	FullName    string `json:"full_name"`
 	FullPath    string `json:"full_path"`
 	ParentId    *int   `json:"parent_id"`
-}
-
-func (p GroupResponse) GroupId() string {
-	return "group:" + strconv.Itoa(p.Id)
-}
-
-func (p GroupResponse) GroupName() string {
-	return p.Name
 }
 
 type GitlabApiParams struct {

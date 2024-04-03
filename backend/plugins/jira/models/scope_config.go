@@ -42,14 +42,17 @@ type CommitUrlPattern struct {
 
 type JiraScopeConfig struct {
 	common.ScopeConfig         `mapstructure:",squash" json:",inline" gorm:"embedded"`
-	ConnectionId               uint64                 `mapstructure:"connectionId" json:"connectionId"`
-	Name                       string                 `mapstructure:"name" json:"name" gorm:"type:varchar(255);index:idx_name_jira,unique" validate:"required"`
 	EpicKeyField               string                 `mapstructure:"epicKeyField,omitempty" json:"epicKeyField" gorm:"type:varchar(255)"`
 	StoryPointField            string                 `mapstructure:"storyPointField,omitempty" json:"storyPointField" gorm:"type:varchar(255)"`
 	RemotelinkCommitShaPattern string                 `mapstructure:"remotelinkCommitShaPattern,omitempty" json:"remotelinkCommitShaPattern" gorm:"type:varchar(255)"`
 	RemotelinkRepoPattern      []CommitUrlPattern     `mapstructure:"remotelinkRepoPattern,omitempty" json:"remotelinkRepoPattern" gorm:"type:json;serializer:json"`
 	TypeMappings               map[string]TypeMapping `mapstructure:"typeMappings,omitempty" json:"typeMappings" gorm:"type:json;serializer:json"`
 	ApplicationType            string                 `mapstructure:"applicationType,omitempty" json:"applicationType" gorm:"type:varchar(255)"`
+}
+
+func (r *JiraScopeConfig) SetConnectionId(c *JiraScopeConfig, connectionId uint64) {
+	c.ConnectionId = connectionId
+	c.ScopeConfig.ConnectionId = connectionId
 }
 
 func (r *JiraScopeConfig) Validate() errors.Error {

@@ -45,19 +45,16 @@ type PaginatedBlueprint struct {
 // @Router /blueprints [post]
 func Post(c *gin.Context) {
 	blueprint := &models.Blueprint{}
-
 	err := c.ShouldBind(blueprint)
 	if err != nil {
 		shared.ApiOutputError(c, errors.BadInput.Wrap(err, shared.BadRequestBody))
 		return
 	}
-
 	err = services.CreateBlueprint(blueprint)
 	if err != nil {
 		shared.ApiOutputError(c, errors.Default.Wrap(err, "error creating blueprint"))
 		return
 	}
-
 	shared.ApiOutputSuccess(c, blueprint, http.StatusCreated)
 }
 
@@ -80,7 +77,7 @@ func Index(c *gin.Context) {
 		shared.ApiOutputError(c, errors.BadInput.Wrap(err, shared.BadRequestBody))
 		return
 	}
-	blueprints, count, err := services.GetBlueprints(&query)
+	blueprints, count, err := services.GetBlueprints(&query, true)
 	if err != nil {
 		shared.ApiOutputAbort(c, errors.Default.Wrap(err, "error getting blueprints"))
 		return
@@ -104,7 +101,7 @@ func Get(c *gin.Context) {
 		shared.ApiOutputError(c, errors.BadInput.Wrap(err, "bad blueprintId format supplied"))
 		return
 	}
-	blueprint, err := services.GetBlueprint(id)
+	blueprint, err := services.GetBlueprint(id, true)
 	if err != nil {
 		shared.ApiOutputError(c, errors.Default.Wrap(err, "error getting blueprint"))
 		return
@@ -168,7 +165,7 @@ func Patch(c *gin.Context) {
 // @Tags framework/blueprints
 // @Accept application/json
 // @Param blueprintId path string true "blueprintId"
-// @Param skipCollectors body bool false "skipCollectors"
+// @Param skipCollectors body models.SyncPolicy false "json"
 // @Success 200 {object} models.Pipeline
 // @Failure 400 {object} shared.ApiBody "Bad Request"
 // @Failure 500 {object} shared.ApiBody "Internal Error"
@@ -181,21 +178,18 @@ func Trigger(c *gin.Context) {
 		return
 	}
 
-	var body struct {
-		SkipCollectors bool `json:"skipCollectors"`
-	}
-
+	syncPolicy := &models.SyncPolicy{}
 	if c.Request.Body == nil || c.Request.ContentLength == 0 {
-		body.SkipCollectors = false
+		syncPolicy.SkipCollectors = false
+		syncPolicy.FullSync = false
 	} else {
-		err = c.ShouldBindJSON(&body)
+		err = c.ShouldBindJSON(syncPolicy)
 		if err != nil {
 			shared.ApiOutputError(c, errors.BadInput.Wrap(err, "error binding request body"))
 			return
 		}
 	}
-
-	pipeline, err := services.TriggerBlueprint(id, body.SkipCollectors)
+	pipeline, err := services.TriggerBlueprint(id, syncPolicy, true)
 	if err != nil {
 		shared.ApiOutputError(c, errors.Default.Wrap(err, "error triggering blueprint"))
 		return
@@ -224,8 +218,7 @@ func GetBlueprintPipelines(c *gin.Context) {
 		shared.ApiOutputError(c, errors.BadInput.Wrap(err, "bad request URI format"))
 		return
 	}
-
-	pipelines, count, err := services.GetPipelines(&query)
+	pipelines, count, err := services.GetPipelines(&query, true)
 	if err != nil {
 		shared.ApiOutputError(c, errors.Default.Wrap(err, "error getting pipelines"))
 		return

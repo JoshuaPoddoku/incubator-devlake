@@ -27,6 +27,11 @@ type TapdConn struct {
 	helper.BasicAuth      `mapstructure:",squash"`
 }
 
+func (connection TapdConn) Sanitize() TapdConn {
+	connection.Password = ""
+	return connection
+}
+
 // TapdConnection holds TapdConn plus ID/Name for database storage
 type TapdConnection struct {
 	helper.BaseConnection `mapstructure:",squash"`
@@ -35,4 +40,21 @@ type TapdConnection struct {
 
 func (TapdConnection) TableName() string {
 	return "_tool_tapd_connections"
+}
+
+func (connection TapdConnection) Sanitize() TapdConnection {
+	connection.TapdConn = connection.TapdConn.Sanitize()
+	return connection
+}
+
+func (connection *TapdConnection) MergeFromRequest(target *TapdConnection, body map[string]interface{}) error {
+	password := target.Password
+	if err := helper.DecodeMapStruct(body, target, true); err != nil {
+		return err
+	}
+	modifiedPassword := target.Password
+	if modifiedPassword == "" {
+		target.Password = password
+	}
+	return nil
 }

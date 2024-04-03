@@ -40,7 +40,7 @@ ARG HTTP_PROXY=
 ARG HTTPS_PROXY=
 
 RUN apt-get update
-RUN apt-get install -y gcc binutils libfindbin-libs-perl cmake libssh2-1-dev libssl-dev zlib1g-dev
+RUN apt-get install -y gcc binutils libfindbin-libs-perl cmake libssh2-1-dev libssl-dev zlib1g-dev git openssh-client corkscrew
 
 RUN if [ "$(arch)" != "aarch64" ] ; then \
         apt-get install -y gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu ; \
@@ -50,7 +50,7 @@ RUN if [ "$(arch)" != "x86_64" ] ; then \
     fi
 
 RUN go install github.com/vektra/mockery/v2@v2.20.0
-RUN go install github.com/swaggo/swag/cmd/swag@v1.8.12
+RUN go install github.com/swaggo/swag/cmd/swag@v1.16.1
 
 COPY --from=debian-amd64 /usr/include /rootfs-amd64/usr/include
 COPY --from=debian-amd64 /usr/lib/x86_64-linux-gnu /rootfs-amd64/usr/lib/x86_64-linux-gnu
@@ -102,7 +102,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     fi && \
     export PKG_CONFIG_PATH=/usr/local/deps/target/lib/pkgconfig && \
     export CGO_ENABLED=1 &&\
-    PLUGIN="$GO_PLUGINS" make all
+    DEVLAKE_PLUGINS="$GO_PLUGINS" make all
 
 # remove symlink in lib, we will recreate in final image
 RUN cd /usr/local/deps/target/lib && \
@@ -116,7 +116,7 @@ RUN cd /usr/local/deps/target/lib && \
 FROM python:3.9-slim-bullseye as base
 
 RUN apt-get update && \
-    apt-get install -y python3-dev python3-pip tar curl libssh2-1 zlib1g libffi-dev default-libmysqlclient-dev libpq-dev tini && \
+    apt-get install -y python3-dev python3-pip tar pkg-config curl libssh2-1 zlib1g libffi-dev default-libmysqlclient-dev libpq-dev tini && \
     apt-get clean && \
     rm -fr /usr/share/doc/* \
            /usr/share/info/* \
@@ -133,6 +133,7 @@ RUN apt-get update && \
 EXPOSE 8080
 
 RUN useradd -ms /bin/bash -d /app devlake -u 1010
+RUN chown -R devlake:devlake /etc/ssl/certs
 USER devlake
 ENV PYTHONUNBUFFERED=1
 

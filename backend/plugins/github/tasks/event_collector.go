@@ -46,7 +46,7 @@ type SimpleGithubApiEvents struct {
 }
 
 var CollectApiEventsMeta = plugin.SubTaskMeta{
-	Name:             "collectApiEvents",
+	Name:             "Collect Events",
 	EntryPoint:       CollectApiEvents,
 	EnabledByDefault: true,
 	Description:      "Collect Events data from Github api, supports both timeFilter and diffSync.",
@@ -69,7 +69,6 @@ func CollectApiEvents(taskCtx plugin.SubTaskContext) errors.Error {
 			Table: RAW_EVENTS_TABLE,
 		},
 		ApiClient: data.ApiClient,
-		TimeAfter: data.TimeAfter, // set to nil to disable timeFilter
 		CollectNewRecordsByList: helper.FinalizableApiCollectorListArgs{
 			PageSize:    100,
 			Concurrency: 10,

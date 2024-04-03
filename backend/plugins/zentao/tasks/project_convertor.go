@@ -19,8 +19,6 @@ package tasks
 
 import (
 	"fmt"
-	"reflect"
-
 	"github.com/apache/incubator-devlake/core/dal"
 	"github.com/apache/incubator-devlake/core/errors"
 	"github.com/apache/incubator-devlake/core/models/domainlayer"
@@ -29,6 +27,7 @@ import (
 	"github.com/apache/incubator-devlake/core/plugin"
 	"github.com/apache/incubator-devlake/helpers/pluginhelper/api"
 	"github.com/apache/incubator-devlake/plugins/zentao/models"
+	"reflect"
 )
 
 const RAW_PROJECT_TABLE = "zentao_api_projects"
@@ -46,6 +45,7 @@ var ConvertProjectMeta = plugin.SubTaskMeta{
 func ConvertProjects(taskCtx plugin.SubTaskContext) errors.Error {
 	data := taskCtx.GetData().(*ZentaoTaskData)
 	db := taskCtx.GetDal()
+	logger := taskCtx.GetLogger()
 	boardIdGen := didgen.NewDomainIdGenerator(&models.ZentaoProject{})
 	cursor, err := db.Cursor(
 		dal.From(&models.ZentaoProject{}),
@@ -55,6 +55,11 @@ func ConvertProjects(taskCtx plugin.SubTaskContext) errors.Error {
 		return err
 	}
 	defer cursor.Close()
+	homePage, getZentaoHomePageErr := getZentaoHomePage(data.ApiClient.GetEndpoint())
+	if getZentaoHomePageErr != nil {
+		logger.Error(getZentaoHomePageErr, "get zentao homepage")
+		return errors.Default.WrapRaw(getZentaoHomePageErr)
+	}
 	convertor, err := api.NewDataConverter(api.DataConverterArgs{
 		InputRowType: reflect.TypeOf(models.ZentaoProject{}),
 		Input:        cursor,
@@ -65,9 +70,7 @@ func ConvertProjects(taskCtx plugin.SubTaskContext) errors.Error {
 		},
 		Convert: func(inputRow interface{}) ([]interface{}, errors.Error) {
 			toolProject := inputRow.(*models.ZentaoProject)
-
 			data.ProjectName = toolProject.Name
-
 			domainBoard := &ticket.Board{
 				DomainEntity: domainlayer.DomainEntity{
 					Id: boardIdGen.Generate(toolProject.ConnectionId, toolProject.Id),
@@ -76,7 +79,7 @@ func ConvertProjects(taskCtx plugin.SubTaskContext) errors.Error {
 				Description: toolProject.Description,
 				CreatedDate: toolProject.OpenedDate.ToNullableTime(),
 				Type:        "scrum",
-				Url:         fmt.Sprintf("/project-index-%d.html", data.Options.ProjectId),
+				Url:         fmt.Sprintf("%s/project-index-%d.html", homePage, data.Options.ProjectId),
 			}
 			results := make([]interface{}, 0)
 			results = append(results, domainBoard)

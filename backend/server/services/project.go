@@ -224,14 +224,14 @@ func PatchProject(name string, body map[string]interface{}) (*models.ApiOutputPr
 	}
 
 	// Blueprint
-	err = tx.UpdateColumn(
-		&models.Blueprint{},
-		"enable", projectInput.Enable,
-		dal.Where("project_name = ?", name),
-	)
-	if err != nil {
-		return nil, err
-	}
+	// err = tx.UpdateColumn(
+	// 	&models.Blueprint{},
+	// 	"enable", projectInput.Enable,
+	// 	dal.Where("project_name = ?", name),
+	// )
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	// refresh project metrics if needed
 	if len(projectInput.Metrics) > 0 {
@@ -377,7 +377,7 @@ func makeProjectOutput(project *models.Project, withLastPipeline bool) (*models.
 	}
 	if withLastPipeline {
 		if projectOutput.Blueprint == nil {
-			logger.Warn(fmt.Errorf("Blueprint is nil"), "want to get latest pipeline, but blueprint is nil")
+			logger.Warn(fmt.Errorf("blueprint is nil"), "want to get latest pipeline, but blueprint is nil")
 		} else {
 			pipelines, pipelinesCount, err := GetPipelines(&PipelineQuery{
 				BlueprintId: projectOutput.Blueprint.ID,
@@ -385,7 +385,7 @@ func makeProjectOutput(project *models.Project, withLastPipeline bool) (*models.
 					PageSize: 1,
 					Page:     1,
 				},
-			})
+			}, true)
 			if err != nil {
 				logger.Error(err, "GetPipelines, blueprint id: %d", projectOutput.Blueprint.ID)
 				return nil, errors.Default.Wrap(err, "Error to get pipeline by blueprint id")

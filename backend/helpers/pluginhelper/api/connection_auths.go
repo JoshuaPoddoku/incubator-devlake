@@ -144,9 +144,21 @@ func (ma *MultiAuth) SetupAuthenticationForConnection(connection plugin.ApiConne
 	return apiAuthenticator.SetupAuthentication(req)
 }
 
+func (ma *MultiAuth) CustomValidate(connection interface{}, v *validator.Validate) errors.Error {
+	return ma.ValidateConnection(connection, v)
+}
+
+// TODO: deprecated, rename to CustomValidate instead
 func (ma *MultiAuth) ValidateConnection(connection interface{}, v *validator.Validate) errors.Error {
-	// the idea is to filtered out errors from unselected Authentication struct
-	validationErrors := v.Struct(connection).(validator.ValidationErrors)
+	// the idea is to filter out errors from unselected Authentication struct
+	err := v.Struct(connection)
+	if err == nil {
+		return nil
+	}
+	validationErrors, ok := err.(validator.ValidationErrors)
+	if !ok {
+		return errors.Default.New("err: %s cannot be cast to validationErrors")
+	}
 	if validationErrors != nil {
 		filteredValidationErrors := make(validator.ValidationErrors, 0)
 		connType := reflect.TypeOf(connection).Elem()

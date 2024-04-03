@@ -20,10 +20,12 @@ package models
 import (
 	"encoding/base64"
 	"fmt"
+	"github.com/apache/incubator-devlake/core/utils"
+	"net/http"
+
 	"github.com/apache/incubator-devlake/core/errors"
 	"github.com/apache/incubator-devlake/core/plugin"
 	helper "github.com/apache/incubator-devlake/helpers/pluginhelper/api"
-	"net/http"
 )
 
 type SonarqubeAccessToken helper.AccessToken
@@ -43,17 +45,21 @@ func (sat SonarqubeAccessToken) GetEncodedToken() string {
 	return base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%v:", sat.Token)))
 }
 
-// This object conforms to what the frontend currently sends.
-type SonarqubeConnection struct {
-	helper.BaseConnection `mapstructure:",squash"`
-	helper.RestConnection `mapstructure:",squash"`
-	SonarqubeAccessToken  `mapstructure:",squash"`
-}
-
 // SonarqubeConn holds the essential information to connect to the sonarqube API
 type SonarqubeConn struct {
 	helper.RestConnection `mapstructure:",squash"`
 	SonarqubeAccessToken  `mapstructure:",squash"`
+}
+
+func (connection SonarqubeConn) Sanitize() SonarqubeConn {
+	connection.Token = utils.SanitizeString(connection.Token)
+	return connection
+}
+
+// This object conforms to what the frontend currently sends.
+type SonarqubeConnection struct {
+	helper.BaseConnection `mapstructure:",squash"`
+	SonarqubeConn         `mapstructure:",squash"`
 }
 
 // This object conforms to what the frontend currently expects.
@@ -65,4 +71,21 @@ type SonarqubeResponse struct {
 
 func (SonarqubeConnection) TableName() string {
 	return "_tool_sonarqube_connections"
+}
+
+func (connection SonarqubeConnection) Sanitize() SonarqubeConnection {
+	connection.SonarqubeConn = connection.SonarqubeConn.Sanitize()
+	return connection
+}
+
+func (connection *SonarqubeConnection) MergeFromRequest(target *SonarqubeConnection, body map[string]interface{}) error {
+	token := target.Token
+	if err := helper.DecodeMapStruct(body, target, true); err != nil {
+		return err
+	}
+	modifiedToken := target.Token
+	if modifiedToken == "" || modifiedToken == utils.SanitizeString(token) {
+		target.Token = token
+	}
+	return nil
 }

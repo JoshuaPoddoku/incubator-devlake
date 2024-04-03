@@ -26,45 +26,31 @@ import (
 )
 
 var vld *validator.Validate
-var connectionHelper *api.ConnectionApiHelper
-var scopeHelper *api.ScopeApiHelper[models.BambooConnection, models.BambooPlan, models.BambooScopeConfig]
-var remoteHelper *api.RemoteApiHelper[models.BambooConnection, models.BambooPlan, models.ApiBambooPlan, api.NoRemoteGroupResponse]
-var scopeConfigHelper *api.ScopeConfigHelper[models.BambooScopeConfig]
 
 var basicRes context.BasicRes
+var dsHelper *api.DsHelper[models.BambooConnection, models.BambooPlan, models.BambooScopeConfig]
+var raProxy *api.DsRemoteApiProxyHelper[models.BambooConnection]
+var raScopeList *api.DsRemoteApiScopeListHelper[models.BambooConnection, models.BambooPlan, BambooRemotePagination]
+var raScopeSearch *api.DsRemoteApiScopeSearchHelper[models.BambooConnection, models.BambooPlan]
 
 func Init(br context.BasicRes, p plugin.PluginMeta) {
-
 	basicRes = br
 	vld = validator.New()
-	connectionHelper = api.NewConnectionHelper(
-		basicRes,
-		vld,
+	dsHelper = api.NewDataSourceHelper[
+		models.BambooConnection,
+		models.BambooPlan,
+		models.BambooScopeConfig,
+	](
+		br,
 		p.Name(),
-	)
-	params := &api.ReflectionParameters{
-		ScopeIdFieldName:     "PlanKey",
-		ScopeIdColumnName:    "plan_key",
-		RawScopeParamName:    "PlanKey",
-		SearchScopeParamName: "name",
-	}
-	scopeHelper = api.NewScopeHelper[models.BambooConnection, models.BambooPlan, models.BambooScopeConfig](
-		basicRes,
-		vld,
-		connectionHelper,
-		api.NewScopeDatabaseHelperImpl[models.BambooConnection, models.BambooPlan, models.BambooScopeConfig](
-			basicRes, connectionHelper, params),
-		params,
+		[]string{"name"},
+		func(c models.BambooConnection) models.BambooConnection {
+			return c.Sanitize()
+		},
+		nil,
 		nil,
 	)
-	remoteHelper = api.NewRemoteHelper[models.BambooConnection, models.BambooPlan, models.ApiBambooPlan, api.NoRemoteGroupResponse](
-		basicRes,
-		vld,
-		connectionHelper,
-	)
-	scopeConfigHelper = api.NewScopeConfigHelper[models.BambooScopeConfig](
-		basicRes,
-		vld,
-		p.Name(),
-	)
+	raProxy = api.NewDsRemoteApiProxyHelper[models.BambooConnection](dsHelper.ConnApi.ModelApiHelper)
+	raScopeList = api.NewDsRemoteApiScopeListHelper[models.BambooConnection, models.BambooPlan, BambooRemotePagination](raProxy, listBambooRemoteScopes)
+	raScopeSearch = api.NewDsRemoteApiScopeSearchHelper[models.BambooConnection, models.BambooPlan](raProxy, searchBambooPlans)
 }

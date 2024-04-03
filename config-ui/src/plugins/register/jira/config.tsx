@@ -17,26 +17,24 @@
  */
 
 import { DOC_URL } from '@/release';
+import { IPluginConfig } from '@/types';
 
-import type { PluginConfigType } from '../../types';
-import { PluginType } from '../../types';
-
-import Icon from './assets/icon.svg';
+import Icon from './assets/icon.svg?react';
 import { Auth } from './connection-fields';
 
-export const JiraConfig: PluginConfigType = {
-  type: PluginType.Connection,
+export const JiraConfig: IPluginConfig = {
   plugin: 'jira',
   name: 'Jira',
-  icon: Icon,
-  sort: 3,
+  icon: ({ color }) => <Icon fill={color} />,
+  sort: 8,
   connection: {
     docLink: DOC_URL.PLUGIN.JIRA.BASIS,
     fields: [
       'name',
-      ({ initialValues, values, errors, setValues, setErrors }: any) => (
+      ({ type, initialValues, values, errors, setValues, setErrors }: any) => (
         <Auth
           key="auth"
+          type={type}
           initialValues={initialValues}
           values={values}
           errors={errors}
@@ -57,11 +55,7 @@ export const JiraConfig: PluginConfigType = {
     ],
   },
   dataScope: {
-    millerColumns: {
-      title: 'Boards *',
-      subTitle: 'Select the boards you would like to sync.',
-      columnCount: 1,
-    },
+    title: 'Boards',
   },
   scopeConfig: {
     entities: ['TICKET', 'CROSS'],
@@ -69,7 +63,7 @@ export const JiraConfig: PluginConfigType = {
       storyPointField: '',
       typeMappings: {},
       remotelinkCommitShaPattern: '',
-      remotelinkRepoPattern: [''],
+      remotelinkRepoPattern: [],
     },
   },
 };

@@ -19,11 +19,12 @@ package runner
 
 import (
 	gocontext "context"
+	"time"
+
 	"github.com/apache/incubator-devlake/core/context"
 	"github.com/apache/incubator-devlake/core/dal"
 	"github.com/apache/incubator-devlake/core/errors"
 	"github.com/apache/incubator-devlake/core/models"
-	"time"
 )
 
 // RunPipeline FIXME ...
@@ -37,7 +38,7 @@ func RunPipeline(
 	var tasks []models.Task
 	err := db.All(
 		&tasks,
-		dal.Where("pipeline_id = ? AND status in ?", pipelineId, []string{models.TASK_CREATED, models.TASK_RERUN}),
+		dal.Where("pipeline_id = ? AND status in ?", pipelineId, []string{models.TASK_CREATED, models.TASK_RERUN, models.TASK_RESUME}),
 		dal.Orderby("pipeline_row, pipeline_col"),
 	)
 	if err != nil {
@@ -68,6 +69,11 @@ func runPipelineTasks(
 		return err
 	}
 
+	// if pipeline has been cancelled, just return.
+	if dbPipeline.Status == models.TASK_CANCELLED {
+		return nil
+	}
+
 	// This double for loop executes each set of tasks sequentially while
 	// executing the set of tasks concurrently.
 	for i, row := range taskIds {
@@ -90,6 +96,10 @@ func runPipelineTasks(
 			}
 		}
 	}
-	log.Info("pipeline finished in %d ms: %v", time.Now().UnixMilli()-dbPipeline.BeganAt.UnixMilli(), err)
+	if dbPipeline.BeganAt != nil {
+		log.Info("pipeline finished in %d ms: %v", time.Now().UnixMilli()-dbPipeline.BeganAt.UnixMilli(), err)
+	} else {
+		log.Info("pipeline finished at %d ms: %v", time.Now().UnixMilli(), err)
+	}
 	return err
 }

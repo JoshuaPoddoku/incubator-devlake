@@ -20,11 +20,14 @@ package services
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/spf13/cast"
 
 	"github.com/apache/incubator-devlake/core/dal"
 	"github.com/apache/incubator-devlake/core/errors"
@@ -34,15 +37,26 @@ import (
 	"github.com/apache/incubator-devlake/helpers/dbhelper"
 	"github.com/apache/incubator-devlake/impls/logruslog"
 	"github.com/google/uuid"
-	v11 "go.temporal.io/api/enums/v1"
-	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/converter"
 	"golang.org/x/sync/semaphore"
 )
 
 var notificationService *NotificationService
-var temporalClient client.Client
 var globalPipelineLog = logruslog.Global.Nested("pipeline service")
+var pluginOptionSanitizers = map[string]func(map[string]interface{}){
+	"gitextractor": func(options map[string]interface{}) {
+		if v, ok := options["url"]; ok {
+			gitUrl := cast.ToString(v)
+			u, _ := url.Parse(gitUrl)
+			if u != nil && u.User != nil {
+				password, ok := u.User.Password()
+				if ok {
+					gitUrl = strings.Replace(gitUrl, password, strings.Repeat("*", len(password)), -1)
+					options["url"] = gitUrl
+				}
+			}
+		}
+	},
+}
 
 // PipelineQuery is a query for GetPipelines
 type PipelineQuery struct {
@@ -54,6 +68,9 @@ type PipelineQuery struct {
 }
 
 func pipelineServiceInit() {
+	// initialize plugin
+	plugin.InitPlugins(basicRes)
+
 	// notification
 	var notificationEndpoint = cfg.GetString("NOTIFICATION_ENDPOINT")
 	var notificationSecret = cfg.GetString("NOTIFICATION_SECRET")
@@ -61,49 +78,15 @@ func pipelineServiceInit() {
 		notificationService = NewNotificationService(notificationEndpoint, notificationSecret)
 	}
 
-	// temporal client
-	var temporalUrl = cfg.GetString("TEMPORAL_URL")
-	if temporalUrl != "" {
-		// TODO: logger
-		var err error
-		temporalClient, err = client.NewClient(client.Options{
-			HostPort: temporalUrl,
-		})
-		if err != nil {
-			panic(err)
-		}
-		watchTemporalPipelines()
+	// standalone mode: reset pipeline status
+	if cfg.GetBool("RESUME_PIPELINES") {
+		markInterruptedPipelineAs(models.TASK_RESUME)
 	} else {
-		// standalone mode: reset pipeline status
-		errMsg := "The process was terminated unexpectedly"
-		err := db.UpdateColumns(
-			&models.Pipeline{},
-			[]dal.DalSet{
-				{ColumnName: "status", Value: models.TASK_FAILED},
-				{ColumnName: "message", Value: errMsg},
-			},
-			dal.Where("status = ?", models.TASK_RUNNING),
-		)
-		if err != nil {
-			panic(err)
-		}
-		err = db.UpdateColumns(
-			&models.Task{},
-			[]dal.DalSet{
-				{ColumnName: "status", Value: models.TASK_FAILED},
-				{ColumnName: "message", Value: errMsg},
-			},
-			dal.Where("status = ?", models.TASK_RUNNING),
-		)
-		if err != nil {
-			panic(err)
-		}
+		markInterruptedPipelineAs(models.TASK_FAILED)
 	}
 
-	err := ReloadBlueprints(cronManager)
-	if err != nil {
-		panic(err)
-	}
+	// load cronjobs for blueprints
+	errors.Must(ReloadBlueprints())
 
 	var pipelineMaxParallel = cfg.GetInt64("PIPELINE_MAX_PARALLEL")
 	if pipelineMaxParallel < 0 {
@@ -117,17 +100,82 @@ func pipelineServiceInit() {
 	go RunPipelineInQueue(pipelineMaxParallel)
 }
 
+func markInterruptedPipelineAs(status string) {
+	errors.Must(db.UpdateColumns(
+		&models.Pipeline{},
+		[]dal.DalSet{
+			{ColumnName: "status", Value: status},
+		},
+		dal.Where("status = ?", models.TASK_RUNNING),
+	))
+	errors.Must(db.UpdateColumns(
+		&models.Task{},
+		[]dal.DalSet{
+			{ColumnName: "status", Value: status},
+		},
+		dal.Where("status = ?", models.TASK_RUNNING),
+	))
+}
+
 // CreatePipeline and return the model
-func CreatePipeline(newPipeline *models.NewPipeline) (*models.Pipeline, errors.Error) {
+func CreatePipeline(newPipeline *models.NewPipeline, shouldSanitize bool) (*models.Pipeline, errors.Error) {
 	pipeline, err := CreateDbPipeline(newPipeline)
 	if err != nil {
 		return nil, errors.Convert(err)
 	}
+	if shouldSanitize {
+		if err := SanitizePipeline(pipeline); err != nil {
+			return nil, errors.Convert(err)
+		}
+	}
 	return pipeline, nil
 }
 
+func SanitizeBlueprint(blueprint *models.Blueprint) error {
+	for planStageIdx, pipelineStage := range blueprint.Plan {
+		for planTaskIdx := range pipelineStage {
+			pipelineTask, err := SanitizeTask(blueprint.Plan[planStageIdx][planTaskIdx])
+			if err != nil {
+				return err
+			}
+			blueprint.Plan[planStageIdx][planTaskIdx] = pipelineTask
+		}
+	}
+	return nil
+}
+
+func SanitizePipeline(pipeline *models.Pipeline) error {
+	for planStageIdx, pipelineStage := range pipeline.Plan {
+		for planTaskIdx := range pipelineStage {
+			pipelineTask, err := SanitizeTask(pipeline.Plan[planStageIdx][planTaskIdx])
+			if err != nil {
+				return err
+			}
+			pipeline.Plan[planStageIdx][planTaskIdx] = pipelineTask
+		}
+	}
+	return nil
+}
+
+func SanitizeTask(pipelineTask *models.PipelineTask) (*models.PipelineTask, error) {
+	pluginName := pipelineTask.Plugin
+	options, err := SanitizePluginOption(pluginName, pipelineTask.Options)
+	if err != nil {
+		return pipelineTask, err
+	}
+	pipelineTask.Options = options
+	return pipelineTask, nil
+}
+
+func SanitizePluginOption(pluginName string, option map[string]interface{}) (map[string]interface{}, error) {
+	if sanitizer, ok := pluginOptionSanitizers[pluginName]; ok {
+		sanitizer(option)
+	}
+	return option, nil
+}
+
 // GetPipelines by query
-func GetPipelines(query *PipelineQuery) ([]*models.Pipeline, int64, errors.Error) {
+func GetPipelines(query *PipelineQuery, shouldSanitize bool) ([]*models.Pipeline, int64, errors.Error) {
 	pipelines, i, err := GetDbPipelines(query)
 	if err != nil {
 		return nil, 0, errors.Convert(err)
@@ -137,12 +185,17 @@ func GetPipelines(query *PipelineQuery) ([]*models.Pipeline, int64, errors.Error
 		if err != nil {
 			return nil, 0, err
 		}
+		if shouldSanitize {
+			if err := SanitizePipeline(p); err != nil {
+				return nil, 0, errors.Convert(err)
+			}
+		}
 	}
 	return pipelines, i, nil
 }
 
 // GetPipeline by id
-func GetPipeline(pipelineId uint64) (*models.Pipeline, errors.Error) {
+func GetPipeline(pipelineId uint64, shouldSanitize bool) (*models.Pipeline, errors.Error) {
 	dbPipeline, err := GetDbPipeline(pipelineId)
 	if err != nil {
 		return nil, err
@@ -150,6 +203,9 @@ func GetPipeline(pipelineId uint64) (*models.Pipeline, errors.Error) {
 	err = fillPipelineDetail(dbPipeline)
 	if err != nil {
 		return nil, err
+	}
+	if err := SanitizePipeline(dbPipeline); err != nil {
+		return nil, errors.Convert(err)
 	}
 	return dbPipeline, nil
 }
@@ -179,7 +235,7 @@ func dequeuePipeline(runningParallelLabels []string) (pipeline *models.Pipeline,
 	// prepare query to find an appropriate pipeline to execute
 	pipeline = &models.Pipeline{}
 	err = tx.First(pipeline,
-		dal.Where("status IN ?", []string{models.TASK_CREATED, models.TASK_RERUN}),
+		dal.Where("status IN ?", []string{models.TASK_CREATED, models.TASK_RERUN, models.TASK_RESUME}),
 		dal.Join(
 			`left join _devlake_pipeline_labels ON
 				_devlake_pipeline_labels.pipeline_id = _devlake_pipelines.id AND
@@ -195,11 +251,16 @@ func dequeuePipeline(runningParallelLabels []string) (pipeline *models.Pipeline,
 	)
 	if err == nil {
 		// mark the pipeline running, now we want a write lock
+		if pipeline.BeganAt == nil {
+			now := time.Now()
+			pipeline.BeganAt = &now
+			globalPipelineLog.Info("resumed pipeline #%d", pipeline.ID)
+		}
 		errors.Must(tx.LockTables(dal.LockTables{{Table: "_devlake_pipelines", Exclusive: true}}))
 		err = tx.UpdateColumns(&models.Pipeline{}, []dal.DalSet{
 			{ColumnName: "status", Value: models.TASK_RUNNING},
 			{ColumnName: "message", Value: ""},
-			{ColumnName: "began_at", Value: time.Now()},
+			{ColumnName: "began_at", Value: pipeline.BeganAt},
 		}, dal.Where("id = ?", pipeline.ID))
 		if err != nil {
 			panic(err)
@@ -269,108 +330,13 @@ func RunPipelineInQueue(pipelineMaxParallel int64) {
 	}
 }
 
-func watchTemporalPipelines() {
-	ticker := time.NewTicker(3 * time.Second)
-	dc := converter.GetDefaultDataConverter()
-	go func() {
-		// run forever
-		for range ticker.C {
-			// load all running pipeline from database
-			runningDbPipelines := make([]models.Pipeline, 0)
-			err := db.All(&runningDbPipelines, dal.Where("status = ?", models.TASK_RUNNING))
-			if err != nil {
-				panic(err)
-			}
-			// progressDetails will be only used in this goroutine now
-			// So it needn't lock and unlock now
-			progressDetails := make(map[uint64]*models.TaskProgressDetail)
-			// check their status against temporal
-			for _, rp := range runningDbPipelines {
-				workflowId := getTemporalWorkflowId(rp.ID)
-				desc, err := temporalClient.DescribeWorkflowExecution(
-					context.Background(),
-					workflowId,
-					"",
-				)
-				if err != nil {
-					globalPipelineLog.Error(err, "failed to query workflow execution: %v", err)
-					continue
-				}
-				// workflow is terminated by outsider
-				s := desc.WorkflowExecutionInfo.Status
-				if s != v11.WORKFLOW_EXECUTION_STATUS_RUNNING {
-					rp.Status = models.TASK_COMPLETED
-					if s != v11.WORKFLOW_EXECUTION_STATUS_COMPLETED {
-						rp.Status = models.TASK_FAILED
-						// get error message
-						hisIter := temporalClient.GetWorkflowHistory(
-							context.Background(),
-							workflowId,
-							"",
-							false,
-							v11.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT,
-						)
-						for hisIter.HasNext() {
-							his, err := hisIter.Next()
-							if err != nil {
-								globalPipelineLog.Error(err, "failed to get next from workflow history iterator: %v", err)
-								continue
-							}
-							rp.Message = fmt.Sprintf("temporal event type: %v", his.GetEventType())
-						}
-					}
-					rp.FinishedAt = desc.WorkflowExecutionInfo.CloseTime
-					err = db.UpdateColumns(rp, []dal.DalSet{
-						{ColumnName: "status", Value: rp.Status},
-						{ColumnName: "message", Value: rp.Message},
-						{ColumnName: "finished_at", Value: rp.FinishedAt},
-					})
-					if err != nil {
-						globalPipelineLog.Error(err, "failed to update db: %v", err)
-					}
-					continue
-				}
-
-				// check pending activity
-				for _, activity := range desc.PendingActivities {
-					taskId, err := getTaskIdFromActivityId(activity.ActivityId)
-					if err != nil {
-						globalPipelineLog.Error(err, "unable to extract task id from activity id `%s`", activity.ActivityId)
-						continue
-					}
-					progressDetail := &models.TaskProgressDetail{}
-					progressDetails[taskId] = progressDetail
-					heartbeats := activity.GetHeartbeatDetails()
-					if heartbeats == nil {
-						continue
-					}
-					payloads := heartbeats.GetPayloads()
-					if len(payloads) == 0 {
-						return
-					}
-					lastPayload := payloads[len(payloads)-1]
-					if err := dc.FromPayload(lastPayload, progressDetail); err != nil {
-						globalPipelineLog.Error(err, "failed to unmarshal heartbeat payload: %v", err)
-						continue
-					}
-				}
-			}
-			runningTasks.setAll(progressDetails)
-		}
-	}()
-}
-
-func getTemporalWorkflowId(pipelineId uint64) string {
-	return fmt.Sprintf("pipeline #%d", pipelineId)
-}
-
 // NotifyExternal FIXME ...
 func NotifyExternal(pipelineId uint64) errors.Error {
 	if notificationService == nil {
 		return nil
 	}
 	// send notification to an external web endpoint
-	pipeline, err := GetPipeline(pipelineId)
+	pipeline, err := GetPipeline(pipelineId, true)
 	if err != nil {
 		return err
 	}
@@ -416,9 +382,6 @@ func CancelPipeline(pipelineId uint64) errors.Error {
 		// the target pipeline is pending, no running, no need to perform the actual cancel operation
 		return nil
 	}
-	if temporalClient != nil {
-		return errors.Convert(temporalClient.CancelWorkflow(context.Background(), getTemporalWorkflowId(pipelineId), ""))
-	}
 	pendingTasks, count, err := GetTasks(&TaskQuery{PipelineId: pipelineId, Pending: 1, Pagination: Pagination{PageSize: -1}})
 	if err != nil {
 		return errors.Convert(err)
@@ -453,7 +416,10 @@ func RerunPipeline(pipelineId uint64, task *models.Task) (tasks []*models.Task, 
 	txHelper := dbhelper.NewTxHelper(basicRes, &err)
 	tx := txHelper.Begin()
 	defer txHelper.End()
-	err = txHelper.LockTablesTimeout(2*time.Second, dal.LockTables{{Table: "_devlake_pipelines", Exclusive: true}})
+	err = txHelper.LockTablesTimeout(2*time.Second, dal.LockTables{
+		{Table: "_devlake_pipelines", Exclusive: true},
+		{Table: "_devlake_tasks", Exclusive: true},
+	})
 	if err != nil {
 		err = errors.BadInput.Wrap(err, "failed to lock pipeline table, is there any pending pipeline or deletion?")
 		return
@@ -481,7 +447,7 @@ func RerunPipeline(pipelineId uint64, task *models.Task) (tasks []*models.Task, 
 		}
 		failedTasks = append(failedTasks, task)
 	} else {
-		tasks, err := GetTasksWithLastStatus(pipelineId)
+		tasks, err := GetTasksWithLastStatus(pipelineId, false, tx)
 		if err != nil {
 			return nil, errors.Default.Wrap(err, "error getting tasks")
 		}
@@ -498,18 +464,17 @@ func RerunPipeline(pipelineId uint64, task *models.Task) (tasks []*models.Task, 
 	}
 
 	// create new tasks
-	// TODO: this is better to be wrapped inside a transaction
 	rerunTasks := []*models.Task{}
 	for _, t := range failedTasks {
 		// mark previous task failed
 		t.Status = models.TASK_FAILED
-		err := db.UpdateColumn(t, "status", models.TASK_FAILED)
+		err := tx.UpdateColumn(t, "status", models.TASK_FAILED)
 		if err != nil {
 			return nil, err
 		}
 		// create new task
-		rerunTask, err := CreateTask(&models.NewTask{
-			PipelineTask: &plugin.PipelineTask{
+		rerunTask, err := createTask(&models.NewTask{
+			PipelineTask: &models.PipelineTask{
 				Plugin:   t.Plugin,
 				Subtasks: t.Subtasks,
 				Options:  t.Options,
@@ -518,7 +483,7 @@ func RerunPipeline(pipelineId uint64, task *models.Task) (tasks []*models.Task, 
 			PipelineRow: t.PipelineRow,
 			PipelineCol: t.PipelineCol,
 			IsRerun:     true,
-		})
+		}, tx)
 		if err != nil {
 			return nil, err
 		}

@@ -32,7 +32,7 @@ func init() {
 }
 
 var ExtractApiMergeRequestDetailsMeta = plugin.SubTaskMeta{
-	Name:             "extractApiMergeRequestDetails",
+	Name:             "Extract MR Details",
 	EntryPoint:       ExtractApiMergeRequestDetails,
 	EnabledByDefault: true,
 	Description:      "Extract raw merge request Details data into tool layer table GitlabMergeRequest and GitlabReviewer",
@@ -84,19 +84,12 @@ func ExtractApiMergeRequestDetails(taskCtx plugin.SubTaskContext) errors.Error {
 					ConnectionId: data.Options.ConnectionId,
 				})
 				// if pr.Type has not been set and prType is set in .env, process the below
-				if labelTypeRegex != nil {
-					groups := labelTypeRegex.FindStringSubmatch(label)
-					if len(groups) > 1 {
-						gitlabMergeRequest.Type = groups[1]
-					}
+				if labelTypeRegex != nil && labelTypeRegex.MatchString(label) {
+					gitlabMergeRequest.Type = label
 				}
-
 				// if pr.Component has not been set and prComponent is set in .env, process
-				if labelComponentRegex != nil {
-					groups := labelComponentRegex.FindStringSubmatch(label)
-					if len(groups) > 1 {
-						gitlabMergeRequest.Component = groups[1]
-					}
+				if labelComponentRegex != nil && labelComponentRegex.MatchString(label) {
+					gitlabMergeRequest.Component = label
 				}
 			}
 			for _, reviewer := range mr.Reviewers {

@@ -18,15 +18,14 @@ limitations under the License.
 package services
 
 import (
-	"encoding/json"
-	"github.com/apache/incubator-devlake/core/plugin"
 	"testing"
 
+	coreModels "github.com/apache/incubator-devlake/core/models"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestParallelizePipelineTasks(t *testing.T) {
-	plan1 := plugin.PipelinePlan{
+	plan1 := coreModels.PipelinePlan{
 		{
 			{Plugin: "github"},
 			{Plugin: "gitlab"},
@@ -37,13 +36,13 @@ func TestParallelizePipelineTasks(t *testing.T) {
 		},
 	}
 
-	plan2 := plugin.PipelinePlan{
+	plan2 := coreModels.PipelinePlan{
 		{
 			{Plugin: "jira"},
 		},
 	}
 
-	plan3 := plugin.PipelinePlan{
+	plan3 := coreModels.PipelinePlan{
 		{
 			{Plugin: "jenkins"},
 		},
@@ -59,7 +58,7 @@ func TestParallelizePipelineTasks(t *testing.T) {
 	assert.Equal(t, plan2, ParallelizePipelinePlans(plan2))
 	assert.Equal(
 		t,
-		plugin.PipelinePlan{
+		coreModels.PipelinePlan{
 			{
 				{Plugin: "github"},
 				{Plugin: "gitlab"},
@@ -74,7 +73,7 @@ func TestParallelizePipelineTasks(t *testing.T) {
 	)
 	assert.Equal(
 		t,
-		plugin.PipelinePlan{
+		coreModels.PipelinePlan{
 			{
 				{Plugin: "github"},
 				{Plugin: "gitlab"},
@@ -94,44 +93,57 @@ func TestParallelizePipelineTasks(t *testing.T) {
 	)
 }
 
-func TestWrapPipelinePlans(t *testing.T) {
-	beforePlan2 := json.RawMessage(`[[{"plugin":"github"},{"plugin":"gitlab"}],[{"plugin":"gitextractor1"},{"plugin":"gitextractor2"}]]`)
-
-	mainPlan := plugin.PipelinePlan{
+func TestRemoveCollectorTasks(t *testing.T) {
+	plan1 := coreModels.PipelinePlan{
 		{
-			{Plugin: "jira"},
+			{
+				Plugin: "github",
+				Subtasks: []string{
+					"CollectApiPipelines",
+					"ExtractApiPipelines",
+					"collectApiPipelineDetails",
+					"extractApiPipelineDetails",
+					"collectApiJobs",
+					"extractApiJobs",
+					"collectAccounts",
+					"extractAccounts",
+					"ConvertAccounts",
+					"convertApiProject",
+					"convertPipelines",
+					"convertPipelineCommits",
+					"convertJobs",
+				},
+			},
+		},
+		{
+			{
+				Plugin:   "starrocks",
+				Subtasks: []string{},
+			},
 		},
 	}
-
-	afterPlan2 := json.RawMessage(`[[{"plugin":"jenkins"}],[{"plugin":"jenkins"}]]`)
-
-	result1, err1 := WrapPipelinePlans(nil, mainPlan, nil)
-	assert.Nil(t, err1)
-	assert.Equal(t, mainPlan, result1)
-
-	result2, err2 := WrapPipelinePlans(beforePlan2, mainPlan, afterPlan2)
-	assert.Nil(t, err2)
-	assert.Equal(t, plugin.PipelinePlan{
+	assert.Equal(t, coreModels.PipelinePlan{
 		{
-			{Plugin: "github"},
-			{Plugin: "gitlab"},
+			{
+				Plugin: "github",
+				Subtasks: []string{
+					"ExtractApiPipelines",
+					"extractApiPipelineDetails",
+					"extractApiJobs",
+					"extractAccounts",
+					"ConvertAccounts",
+					"convertApiProject",
+					"convertPipelines",
+					"convertPipelineCommits",
+					"convertJobs",
+				},
+			},
 		},
 		{
-			{Plugin: "gitextractor1"},
-			{Plugin: "gitextractor2"},
+			{
+				Plugin:   "starrocks",
+				Subtasks: []string{},
+			},
 		},
-		{
-			{Plugin: "jira"},
-		},
-		{
-			{Plugin: "jenkins"},
-		},
-		{
-			{Plugin: "jenkins"},
-		},
-	}, result2)
-
-	result3, err3 := WrapPipelinePlans(json.RawMessage("[]"), mainPlan, json.RawMessage("[]"))
-	assert.Nil(t, err3)
-	assert.Equal(t, mainPlan, result3)
+	}, removeCollectorTasks(plan1))
 }

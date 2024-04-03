@@ -27,6 +27,11 @@ type JenkinsConn struct {
 	helper.BasicAuth      `mapstructure:",squash"`
 }
 
+func (connection JenkinsConn) Sanitize() JenkinsConn {
+	connection.Password = ""
+	return connection
+}
+
 // JenkinsConnection holds JenkinsConn plus ID/Name for database storage
 type JenkinsConnection struct {
 	helper.BaseConnection `mapstructure:",squash"`
@@ -35,4 +40,21 @@ type JenkinsConnection struct {
 
 func (JenkinsConnection) TableName() string {
 	return "_tool_jenkins_connections"
+}
+
+func (connection JenkinsConnection) Sanitize() JenkinsConnection {
+	connection.JenkinsConn = connection.JenkinsConn.Sanitize()
+	return connection
+}
+
+func (connection *JenkinsConnection) MergeFromRequest(target *JenkinsConnection, body map[string]interface{}) error {
+	password := target.Password
+	if err := helper.DecodeMapStruct(body, target, true); err != nil {
+		return err
+	}
+	modifiedPassword := target.Password
+	if modifiedPassword == "" {
+		target.Password = password
+	}
+	return nil
 }

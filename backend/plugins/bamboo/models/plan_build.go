@@ -18,6 +18,7 @@ limitations under the License.
 package models
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/apache/incubator-devlake/core/models/common"
@@ -66,8 +67,12 @@ type BambooPlanBuild struct {
 	common.NoPKModel
 }
 
-func (BambooPlanBuild) TableName() string {
+func (bambooPlanBuild BambooPlanBuild) TableName() string {
 	return "_tool_bamboo_plan_builds"
+}
+
+func (bambooPlanBuild BambooPlanBuild) GenerateCICDPipeLineName() string {
+	return fmt.Sprintf("%s - %s/%d", bambooPlanBuild.ProjectName, bambooPlanBuild.PlanName, bambooPlanBuild.BuildNumber)
 }
 
 func (apiRes *ApiBambooPlanBuild) Convert() *BambooPlanBuild {
@@ -120,6 +125,9 @@ type ApiBambooPlanBuild struct {
 	PrettyBuildStartedTime   string     `json:"prettyBuildStartedTime"`
 	BuildCompletedTime       *time.Time `json:"buildCompletedTime"`
 	BuildCompletedDate       *time.Time `json:"buildCompletedDate"`
+	QueueStartedTime         *time.Time `json:"queueStartedTime"`
+	QueueDuration            int64      `json:"queueDuration"`
+	QueueTimeInSeconds       int64      `json:"queueTimeInSeconds"`
 	PrettyBuildCompletedTime string     `json:"prettyBuildCompletedTime"`
 	BuildDurationInSeconds   int        `json:"buildDurationInSeconds"`
 	BuildDuration            int        `json:"buildDuration"`

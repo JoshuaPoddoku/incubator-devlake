@@ -19,6 +19,7 @@ package tasks
 
 import (
 	"reflect"
+	"time"
 
 	"github.com/apache/incubator-devlake/core/dal"
 	"github.com/apache/incubator-devlake/core/errors"
@@ -35,7 +36,7 @@ func init() {
 }
 
 var ConvertJobMeta = plugin.SubTaskMeta{
-	Name:             "convertJobs",
+	Name:             "Convert Job Runs",
 	EntryPoint:       ConvertJobs,
 	EnabledByDefault: true,
 	Description:      "Convert tool layer table gitlab_job into domain layer table job",
@@ -72,36 +73,35 @@ func ConvertJobs(taskCtx plugin.SubTaskContext) (err errors.Error) {
 		Convert: func(inputRow interface{}) ([]interface{}, errors.Error) {
 			gitlabJob := inputRow.(*gitlabModels.GitlabJob)
 
-			startedAt := gitlabJob.GitlabCreatedAt
-			if gitlabJob.StartedAt != nil {
-				startedAt = gitlabJob.StartedAt
+			createdAt := time.Now()
+			if gitlabJob.GitlabCreatedAt != nil {
+				createdAt = *gitlabJob.GitlabCreatedAt
 			}
-
 			domainJob := &devops.CICDTask{
 				DomainEntity: domainlayer.DomainEntity{
 					Id: jobIdGen.Generate(data.Options.ConnectionId, gitlabJob.GitlabId),
 				},
-
 				Name:       gitlabJob.Name,
 				PipelineId: pipelineIdGen.Generate(data.Options.ConnectionId, gitlabJob.PipelineId),
 				Result: devops.GetResult(&devops.ResultRule{
-					Failed:  []string{"failed"},
-					Abort:   []string{"canceled"},
-					Manual:  []string{"manual"},
-					Success: []string{"success"},
-					Skipped: []string{"skipped"},
-					Default: "",
+					Success: []string{StatusSuccess, StatusCompleted},
+					Failure: []string{StatusCanceled, StatusFailed},
+					Default: devops.RESULT_DEFAULT,
 				}, gitlabJob.Status),
-				Status: devops.GetStatus(&devops.StatusRule[string]{
-					InProgress: []string{"created", "waiting_for_resource", "preparing", "pending", "running", "scheduled"},
-					Manual:     []string{"manual"},
-					Default:    devops.STATUS_DONE,
+				Status: devops.GetStatus(&devops.StatusRule{
+					Done:       []string{StatusSuccess, StatusCompleted, StatusFailed},
+					InProgress: []string{StatusRunning, StatusWaitingForResource, StatusPreparing, StatusPending},
+					Default:    devops.STATUS_OTHER,
 				}, gitlabJob.Status),
-
-				DurationSec:  uint64(gitlabJob.Duration),
-				StartedDate:  *startedAt,
-				FinishedDate: gitlabJob.FinishedAt,
-				CicdScopeId:  projectIdGen.Generate(data.Options.ConnectionId, gitlabJob.ProjectId),
+				OriginalStatus:    gitlabJob.Status,
+				DurationSec:       gitlabJob.Duration,
+				QueuedDurationSec: &gitlabJob.QueuedDuration,
+				TaskDatesInfo: devops.TaskDatesInfo{
+					CreatedDate:  createdAt,
+					StartedDate:  gitlabJob.StartedAt,
+					FinishedDate: gitlabJob.FinishedAt,
+				},
+				CicdScopeId: projectIdGen.Generate(data.Options.ConnectionId, gitlabJob.ProjectId),
 			}
 			domainJob.Type = regexEnricher.ReturnNameIfMatched(devops.DEPLOYMENT, gitlabJob.Name)
 			domainJob.Environment = regexEnricher.ReturnNameIfOmittedOrMatched(devops.PRODUCTION, gitlabJob.Name)

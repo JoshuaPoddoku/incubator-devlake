@@ -40,7 +40,7 @@ const RAW_PR_REVIEW_TABLE = "github_api_pull_request_reviews"
 // this struct should be moved to `gitub_api_common.go`
 
 var CollectApiPullRequestReviewsMeta = plugin.SubTaskMeta{
-	Name:             "collectApiPullRequestReviews",
+	Name:             "Collect PR Reviews",
 	EntryPoint:       CollectApiPullRequestReviews,
 	EnabledByDefault: true,
 	Description:      "Collect PullRequestReviews data from Github api, supports both timeFilter and diffSync.",
@@ -60,23 +60,23 @@ func CollectApiPullRequestReviews(taskCtx plugin.SubTaskContext) errors.Error {
 			Name:         data.Options.Name,
 		},
 		Table: RAW_PR_REVIEW_TABLE,
-	}, data.TimeAfter)
+	})
 	if err != nil {
 		return err
 	}
 
-	incremental := collectorWithState.IsIncremental()
 	clauses := []dal.Clause{
 		dal.Select("number, github_id"),
 		dal.From(models.GithubPullRequest{}.TableName()),
 		dal.Where("repo_id = ? and connection_id=?", data.Options.GithubId, data.Options.ConnectionId),
 	}
-	if incremental {
+	if collectorWithState.IsIncremental && collectorWithState.Since != nil {
 		clauses = append(
 			clauses,
-			dal.Where("github_updated_at > ?", collectorWithState.LatestState.LatestSuccessStart),
+			dal.Where("github_updated_at > ?", collectorWithState.Since),
 		)
 	}
+
 	cursor, err := db.Cursor(
 		clauses...,
 	)
@@ -90,10 +90,9 @@ func CollectApiPullRequestReviews(taskCtx plugin.SubTaskContext) errors.Error {
 	}
 
 	err = collectorWithState.InitCollector(helper.ApiCollectorArgs{
-		ApiClient:   data.ApiClient,
-		PageSize:    100,
-		Incremental: incremental,
-		Input:       iterator,
+		ApiClient: data.ApiClient,
+		PageSize:  100,
+		Input:     iterator,
 
 		UrlTemplate: "repos/{{ .Params.Name }}/pulls/{{ .Input.Number }}/reviews",
 

@@ -21,10 +21,12 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
+	"regexp"
 	"strings"
 
 	"github.com/apache/incubator-devlake/core/dal"
 	"github.com/apache/incubator-devlake/core/errors"
+	"github.com/apache/incubator-devlake/core/models"
 	"github.com/apache/incubator-devlake/core/utils"
 
 	"gorm.io/gorm"
@@ -105,6 +107,8 @@ func buildTx(tx *gorm.DB, clauses []dal.Clause) *gorm.DB {
 					Alias: dd.Alias,
 					Raw:   dd.Raw,
 				})
+			case models.DynamicTabler:
+				tx = tx.Table(dd.TableName())
 			default:
 				tx = tx.Model(d)
 			}
@@ -135,11 +139,42 @@ var _ dal.Dal = (*Dalgorm)(nil)
 
 // Exec executes raw sql query
 func (d *Dalgorm) Exec(query string, params ...interface{}) errors.Error {
+	err := validateQuery(query)
+	if err != nil {
+		return err
+	}
 	return d.convertGormError(d.db.Exec(query, transformParams(params)...).Error)
+}
+
+var txPattern = regexp.MustCompile(`(?i)^[\s;]*(begin|(start\s+transaction))[\s;]*$`)
+
+func validateQuery(query string) errors.Error {
+	if txPattern.MatchString(query) { // regexp.MatchString is thread-safe
+		return errors.Default.New("illegal invocation, use the `Begin()` method instead")
+	}
+	return nil
+}
+
+func (d *Dalgorm) unwrapDynamic(entityPtr *interface{}, clausesPtr *[]dal.Clause) {
+	if dynamic, ok := (*entityPtr).(models.DynamicTabler); ok {
+		if clausesPtr != nil {
+			*clausesPtr = append(*clausesPtr, dal.From(dynamic.TableName()))
+		}
+		*entityPtr = dynamic.Unwrap()
+	} else if clausesPtr != nil {
+		// try to add dal.From if it does not exist
+		for _, c := range *clausesPtr {
+			if c.Type == dal.FromClause {
+				return
+			}
+		}
+		*clausesPtr = append(*clausesPtr, dal.From(*entityPtr))
+	}
 }
 
 // AutoMigrate runs auto migration for given models
 func (d *Dalgorm) AutoMigrate(entity interface{}, clauses ...dal.Clause) errors.Error {
+	d.unwrapDynamic(&entity, &clauses)
 	err := buildTx(d.db, clauses).AutoMigrate(entity)
 	if err == nil {
 		// fix pg cache plan error
@@ -170,11 +205,13 @@ func (d *Dalgorm) Fetch(cursor dal.Rows, dst interface{}) errors.Error {
 
 // All loads matched rows from database to `dst`, USE IT WITH COUTIOUS!!
 func (d *Dalgorm) All(dst interface{}, clauses ...dal.Clause) errors.Error {
+	d.unwrapDynamic(&dst, &clauses)
 	return d.convertGormError(buildTx(d.db, clauses).Find(dst).Error)
 }
 
 // First loads first matched row from database to `dst`, error will be returned if no records were found
 func (d *Dalgorm) First(dst interface{}, clauses ...dal.Clause) errors.Error {
+	d.unwrapDynamic(&dst, &clauses)
 	return d.convertGormError(buildTx(d.db, clauses).First(dst).Error)
 }
 
@@ -192,45 +229,52 @@ func (d *Dalgorm) Pluck(column string, dest interface{}, clauses ...dal.Clause) 
 
 // Create insert record to database
 func (d *Dalgorm) Create(entity interface{}, clauses ...dal.Clause) errors.Error {
+	d.unwrapDynamic(&entity, &clauses)
 	return d.convertGormError(buildTx(d.db, clauses).Create(entity).Error)
 }
 
 // CreateWithMap insert record to database
 func (d *Dalgorm) CreateWithMap(entity interface{}, record map[string]interface{}) errors.Error {
+	d.unwrapDynamic(&entity, nil)
 	return d.convertGormError(buildTx(d.db, nil).Model(entity).Clauses(clause.OnConflict{UpdateAll: true}).Create(record).Error)
 }
 
 // Update updates record
 func (d *Dalgorm) Update(entity interface{}, clauses ...dal.Clause) errors.Error {
+	d.unwrapDynamic(&entity, &clauses)
 	return d.convertGormError(buildTx(d.db, clauses).Save(entity).Error)
 }
 
 // CreateOrUpdate tries to create the record, or fallback to update all if failed
 func (d *Dalgorm) CreateOrUpdate(entity interface{}, clauses ...dal.Clause) errors.Error {
+	d.unwrapDynamic(&entity, &clauses)
 	return d.convertGormError(buildTx(d.db, clauses).Clauses(clause.OnConflict{UpdateAll: true}).Create(entity).Error)
 }
 
 // CreateIfNotExist tries to create the record if not exist
 func (d *Dalgorm) CreateIfNotExist(entity interface{}, clauses ...dal.Clause) errors.Error {
+	d.unwrapDynamic(&entity, &clauses)
 	return d.convertGormError(buildTx(d.db, clauses).Clauses(clause.OnConflict{DoNothing: true}).Create(entity).Error)
 }
 
 // Delete records from database
 func (d *Dalgorm) Delete(entity interface{}, clauses ...dal.Clause) errors.Error {
+	d.unwrapDynamic(&entity, &clauses)
 	return d.convertGormError(buildTx(d.db, clauses).Delete(entity).Error)
 }
 
 // UpdateColumn allows you to update mulitple records
 func (d *Dalgorm) UpdateColumn(entityOrTable interface{}, columnName string, value interface{}, clauses ...dal.Clause) errors.Error {
+	d.unwrapDynamic(&entityOrTable, &clauses)
 	if expr, ok := value.(dal.DalClause); ok {
 		value = gorm.Expr(expr.Expr, transformParams(expr.Params)...)
 	}
-	clauses = append(clauses, dal.From(entityOrTable))
 	return d.convertGormError(buildTx(d.db, clauses).Update(columnName, value).Error)
 }
 
 // UpdateColumns allows you to update multiple columns of mulitple records
 func (d *Dalgorm) UpdateColumns(entityOrTable interface{}, set []dal.DalSet, clauses ...dal.Clause) errors.Error {
+	d.unwrapDynamic(&entityOrTable, &clauses)
 	updatesSet := make(map[string]interface{})
 
 	for _, s := range set {

@@ -28,8 +28,7 @@ type PagerDutyParams struct {
 }
 
 type Service struct {
-	common.NoPKModel
-	ConnectionId uint64 `json:"connection_id" mapstructure:"connectionId,omitempty" gorm:"primaryKey" `
+	common.Scope `mapstructure:",squash"`
 	Id           string `json:"id" mapstructure:"id" gorm:"primaryKey;autoIncrement:false" `
 	Url          string `json:"url" mapstructure:"url"`
 	Name         string `json:"name" mapstructure:"name"`

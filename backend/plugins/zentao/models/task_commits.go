@@ -72,14 +72,7 @@ type ZentaoTaskRepoCommitsRes struct {
 		Committer string `json:"committer"`
 		Time      string `json:"time"`
 		Comment   string `json:"comment"`
-		Change    struct {
-			TestYaml struct {
-				Action  string `json:"action"`
-				Kind    string `json:"kind"`
-				OldPath string `json:"oldPath"`
-			} `json:"/test.yaml"`
-		} `json:"change"`
-		Commit string `json:"commit"`
+		Commit    string `json:"commit"`
 	} `json:"log"`
 	Repo struct {
 		ID                 string `json:"id"`

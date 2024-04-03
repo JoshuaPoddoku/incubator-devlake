@@ -19,6 +19,7 @@ package models
 
 import (
 	"fmt"
+	"github.com/apache/incubator-devlake/core/utils"
 	"net/http"
 
 	"github.com/apache/incubator-devlake/core/errors"
@@ -46,6 +47,18 @@ type PagerDutyConnection struct {
 	PagerDutyConn         `mapstructure:",squash"`
 }
 
+func (connection *PagerDutyConnection) MergeFromRequest(target *PagerDutyConnection, body map[string]interface{}) error {
+	token := target.Token
+	if err := helper.DecodeMapStruct(body, target, true); err != nil {
+		return err
+	}
+	modifiedToken := target.Token
+	if modifiedToken == "" || modifiedToken == utils.SanitizeString(token) {
+		target.Token = token
+	}
+	return nil
+}
+
 // This object conforms to what the frontend currently expects.
 type PagerDutyResponse struct {
 	Name string `json:"name"`
@@ -61,4 +74,9 @@ type ApiUserResponse struct {
 
 func (PagerDutyConnection) TableName() string {
 	return "_tool_pagerduty_connections"
+}
+
+func (connection PagerDutyConnection) Sanitize() PagerDutyConnection {
+	connection.Token = utils.SanitizeString(connection.Token)
+	return connection
 }

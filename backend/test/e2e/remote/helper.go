@@ -38,6 +38,7 @@ import (
 const (
 	PLUGIN_NAME     = "fake"
 	TOKEN           = "this_is_a_valid_token"
+	EMPTY_TOKEN     = ""
 	FAKE_PLUGIN_DIR = "python/test/fakeplugin"
 )
 
@@ -147,13 +148,12 @@ func CreateTestBlueprints(t *testing.T, client *helper.DevlakeClient, count int)
 		blueprint := client.CreateBasicBlueprintV2(
 			fmt.Sprintf("Test blueprint %d", i),
 			&helper.BlueprintV2Config{
-				Connection: &plugin.BlueprintConnectionV200{
-					Plugin:       "fake",
+				Connection: &models.BlueprintConnection{
+					PluginName:   "fake",
 					ConnectionId: connection.ID,
-					Scopes: []*plugin.BlueprintScopeV200{
+					Scopes: []*models.BlueprintScope{
 						{
-							Id:   scope.Id,
-							Name: "Test scope",
+							ScopeId: scope.Id,
 						},
 					},
 				},

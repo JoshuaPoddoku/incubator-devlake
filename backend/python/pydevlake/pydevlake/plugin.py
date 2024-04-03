@@ -71,7 +71,7 @@ class Plugin(ABC):
     @abstractmethod
     def test_connection(self, connection: Connection) -> msg.TestConnectionResult:
         """
-        Test if the the connection with the datasource can be established with the given connection.
+        Test if the connection with the datasource can be established with the given connection.
         Must raise an exception if the connection can't be established.
         """
         pass
@@ -114,22 +114,18 @@ class Plugin(ABC):
 
     def make_remote_scopes(self, connection: Connection, group_id: Optional[str] = None) -> msg.RemoteScopes:
         if group_id:
-            remote_scopes = []
             for tool_scope in self.remote_scopes(connection, group_id):
                 tool_scope.connection_id = connection.id
                 tool_scope.raw_data_params = raw_data_params(connection.id, tool_scope.id)
                 tool_scope.raw_data_table = self._raw_scope_table_name()
-                remote_scopes.append(
-                    msg.RemoteScope(
+                yield msg.RemoteScope(
                         id=tool_scope.id,
                         parent_id=group_id,
                         name=tool_scope.name,
                         data=tool_scope
                     )
-                )
         else:
-            remote_scopes = self.remote_scope_groups(connection)
-        return msg.RemoteScopes(__root__=remote_scopes)
+            yield from self.remote_scope_groups(connection)
 
     def make_pipeline(self, scope_config_pairs: list[ScopeConfigPair],
                       connection: Connection) -> msg.PipelineData:
@@ -188,7 +184,8 @@ class Plugin(ABC):
                 options={
                     "scopeId": scope.id,
                     "scopeName": scope.name,
-                    "connectionId": connection.id
+                    "connectionId": connection.id,
+                    "fullName": scope.name
                 }
             ),
             *self.extra_tasks(scope, config, connection)
@@ -222,7 +219,7 @@ class Plugin(ABC):
                 name=subtask.name,
                 entry_point_name=subtask.verb,
                 arguments=[subtask.stream.name],
-                required=True,
+                required=False,
                 enabled_by_default=False,
                 description=subtask.description,
                 domain_types=[dm.value for dm in subtask.stream.domain_types]

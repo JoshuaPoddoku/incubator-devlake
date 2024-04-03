@@ -44,14 +44,14 @@ type ApiJob struct {
 	Pipeline     struct {
 		Id int
 	}
-
-	CreatedAt  *common.Iso8601Time `json:"created_at"`
-	StartedAt  *common.Iso8601Time `json:"started_at"`
-	FinishedAt *common.Iso8601Time `json:"finished_at"`
+	QueuedDuration float64             `json:"queued_duration"`
+	CreatedAt      *common.Iso8601Time `json:"created_at"`
+	StartedAt      *common.Iso8601Time `json:"started_at"`
+	FinishedAt     *common.Iso8601Time `json:"finished_at"`
 }
 
 var ExtractApiJobsMeta = plugin.SubTaskMeta{
-	Name:             "extractApiJobs",
+	Name:             "Extract Job Runs",
 	EntryPoint:       ExtractApiJobs,
 	EnabledByDefault: true,
 	Description:      "Extract raw GitlabJob data into tool layer table GitlabPipeline",
@@ -96,17 +96,18 @@ func ExtractApiJobs(taskCtx plugin.SubTaskContext) errors.Error {
 
 func convertJob(job *ApiJob, projectId int) (*models.GitlabJob, errors.Error) {
 	return &models.GitlabJob{
-		GitlabId:     job.Id,
-		ProjectId:    projectId,
-		Status:       job.Status,
-		Stage:        job.Stage,
-		Name:         job.Name,
-		Ref:          job.Ref,
-		Tag:          job.Tag,
-		AllowFailure: job.AllowFailure,
-		Duration:     job.Duration,
-		WebUrl:       job.WebUrl,
-		PipelineId:   job.Pipeline.Id,
+		GitlabId:       job.Id,
+		ProjectId:      projectId,
+		Status:         job.Status,
+		Stage:          job.Stage,
+		Name:           job.Name,
+		Ref:            job.Ref,
+		Tag:            job.Tag,
+		AllowFailure:   job.AllowFailure,
+		Duration:       job.Duration,
+		WebUrl:         job.WebUrl,
+		PipelineId:     job.Pipeline.Id,
+		QueuedDuration: job.QueuedDuration,
 
 		GitlabCreatedAt: common.Iso8601TimeToTime(job.CreatedAt),
 		StartedAt:       common.Iso8601TimeToTime(job.StartedAt),

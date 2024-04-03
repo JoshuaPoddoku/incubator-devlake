@@ -35,7 +35,7 @@ func init() {
 }
 
 var ExtractApiIssuesMeta = plugin.SubTaskMeta{
-	Name:             "extractApiIssues",
+	Name:             "Extract Issues",
 	EntryPoint:       ExtractApiIssues,
 	EnabledByDefault: true,
 	Description:      "Extract raw Issues data into tool layer table github_issues",
@@ -193,7 +193,8 @@ func convertGithubIssue(issue *IssuesResponse, connectionId uint64, repositoryId
 		githubIssue.AuthorName = issue.User.Login
 	}
 	if issue.ClosedAt != nil {
-		githubIssue.LeadTimeMinutes = uint(issue.ClosedAt.ToTime().Sub(issue.GithubCreatedAt.ToTime()).Minutes())
+		temp := uint(issue.ClosedAt.ToTime().Sub(issue.GithubCreatedAt.ToTime()).Minutes())
+		githubIssue.LeadTimeMinutes = &temp
 	}
 	if issue.Milestone != nil {
 		githubIssue.MilestoneId = issue.Milestone.Id
@@ -210,25 +211,15 @@ func convertGithubLabels(issueRegexes *IssueRegexes, issue *IssuesResponse, gith
 			IssueId:      githubIssue.GithubId,
 			LabelName:    label.Name,
 		})
-		joinedLabels = append(joinedLabels, label.Name)
 
-		if issueRegexes.SeverityRegex != nil {
-			groups := issueRegexes.SeverityRegex.FindStringSubmatch(label.Name)
-			if len(groups) > 1 {
-				githubIssue.Severity = groups[1]
-			}
+		if issueRegexes.SeverityRegex != nil && issueRegexes.SeverityRegex.MatchString(label.Name) {
+			githubIssue.Severity = label.Name
 		}
-		if issueRegexes.ComponentRegex != nil {
-			groups := issueRegexes.ComponentRegex.FindStringSubmatch(label.Name)
-			if len(groups) > 1 {
-				githubIssue.Component = groups[1]
-			}
+		if issueRegexes.ComponentRegex != nil && issueRegexes.ComponentRegex.MatchString(label.Name) {
+			githubIssue.Component = label.Name
 		}
-		if issueRegexes.PriorityRegex != nil {
-			groups := issueRegexes.PriorityRegex.FindStringSubmatch(label.Name)
-			if len(groups) > 1 {
-				githubIssue.Priority = groups[1]
-			}
+		if issueRegexes.PriorityRegex != nil && issueRegexes.PriorityRegex.MatchString(label.Name) {
+			githubIssue.Priority = label.Name
 		}
 		if issueRegexes.TypeRequirementRegex != nil && issueRegexes.TypeRequirementRegex.MatchString(label.Name) {
 			githubIssue.StdType = ticket.REQUIREMENT
@@ -237,6 +228,7 @@ func convertGithubLabels(issueRegexes *IssueRegexes, issue *IssuesResponse, gith
 		} else if issueRegexes.TypeIncidentRegex != nil && issueRegexes.TypeIncidentRegex.MatchString(label.Name) {
 			githubIssue.StdType = ticket.INCIDENT
 		}
+		joinedLabels = append(joinedLabels, label.Name)
 	}
 	if len(joinedLabels) > 0 {
 		githubIssue.Type = strings.Join(joinedLabels, ",")

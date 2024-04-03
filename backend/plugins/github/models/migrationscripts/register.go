@@ -43,5 +43,9 @@ func All() []plugin.MigrationScript {
 		new(addGithubIssueAssignee),
 		new(addFullName),
 		new(addRawParamTableForScope),
+		new(addDeploymentTable),
+		new(modifyGithubMilestone),
+		new(addEnvNamePattern),
+		new(modifyIssueTypeLength),
 	}
 }

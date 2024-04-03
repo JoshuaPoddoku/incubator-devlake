@@ -31,5 +31,7 @@ func All() []plugin.MigrationScript {
 		new(renameTr2ScopeConfig),
 		new(removeScopeConfig),
 		new(addRawParamTableForScope),
+		new(addIncidentPriority),
+		new(addPagerDutyScopeConfig20231214),
 	}
 }

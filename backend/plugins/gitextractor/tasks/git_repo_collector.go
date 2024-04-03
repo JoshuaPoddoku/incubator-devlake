@@ -18,48 +18,21 @@ limitations under the License.
 package tasks
 
 import (
-	"strings"
-
 	"github.com/apache/incubator-devlake/core/errors"
 	"github.com/apache/incubator-devlake/core/plugin"
 	"github.com/apache/incubator-devlake/plugins/gitextractor/parser"
 )
-
-type GitExtractorOptions struct {
-	RepoId     string `json:"repoId"`
-	Name       string `jsno:"name"`
-	Url        string `json:"url"`
-	User       string `json:"user"`
-	Password   string `json:"password"`
-	PrivateKey string `json:"privateKey"`
-	Passphrase string `json:"passphrase"`
-	Proxy      string `json:"proxy"`
-}
-
-func (o GitExtractorOptions) Valid() errors.Error {
-	if o.RepoId == "" {
-		return errors.BadInput.New("empty repoId")
-	}
-	if o.Url == "" {
-		return errors.BadInput.New("empty url")
-	}
-	url := strings.TrimPrefix(o.Url, "ssh://")
-	if !(strings.HasPrefix(o.Url, "http") || strings.HasPrefix(url, "git@") || strings.HasPrefix(o.Url, "/")) {
-		return errors.BadInput.New("wrong url")
-	}
-	return nil
-}
 
 func CollectGitCommits(subTaskCtx plugin.SubTaskContext) errors.Error {
 	repo := getGitRepo(subTaskCtx)
 	if count, err := repo.CountCommits(subTaskCtx.GetContext()); err != nil {
 		subTaskCtx.GetLogger().Error(err, "unable to get commit count")
 		subTaskCtx.SetProgress(0, -1)
-		return err
+		return errors.Convert(err)
 	} else {
 		subTaskCtx.SetProgress(0, count)
 	}
-	return repo.CollectCommits(subTaskCtx)
+	return errors.Convert(repo.CollectCommits(subTaskCtx))
 }
 
 func CollectGitBranches(subTaskCtx plugin.SubTaskContext) errors.Error {
@@ -67,73 +40,80 @@ func CollectGitBranches(subTaskCtx plugin.SubTaskContext) errors.Error {
 	if count, err := repo.CountBranches(subTaskCtx.GetContext()); err != nil {
 		subTaskCtx.GetLogger().Error(err, "unable to get branch count")
 		subTaskCtx.SetProgress(0, -1)
-		return err
+		return errors.Convert(err)
 	} else {
 		subTaskCtx.SetProgress(0, count)
 	}
-	return repo.CollectBranches(subTaskCtx)
+	return errors.Convert(repo.CollectBranches(subTaskCtx))
 }
 
 func CollectGitTags(subTaskCtx plugin.SubTaskContext) errors.Error {
 	repo := getGitRepo(subTaskCtx)
-	if count, err := repo.CountTags(); err != nil {
+	if count, err := repo.CountTags(subTaskCtx.GetContext()); err != nil {
 		subTaskCtx.GetLogger().Error(err, "unable to get tag count")
 		subTaskCtx.SetProgress(0, -1)
-		return err
+		return errors.Convert(err)
 	} else {
 		subTaskCtx.SetProgress(0, count)
 	}
-	return repo.CollectTags(subTaskCtx)
+	return errors.Convert(repo.CollectTags(subTaskCtx))
 }
 
 func CollectGitDiffLines(subTaskCtx plugin.SubTaskContext) errors.Error {
 	repo := getGitRepo(subTaskCtx)
-	if count, err := repo.CountTags(); err != nil {
+	if count, err := repo.CountTags(subTaskCtx.GetContext()); err != nil {
 		subTaskCtx.GetLogger().Error(err, "unable to get line content")
 		subTaskCtx.SetProgress(0, -1)
-		return err
+		return errors.Convert(err)
 	} else {
 		subTaskCtx.SetProgress(0, count)
 	}
-	return repo.CollectDiffLine(subTaskCtx)
+	return errors.Convert(repo.CollectDiffLine(subTaskCtx))
 }
 
-func getGitRepo(subTaskCtx plugin.SubTaskContext) *parser.GitRepo {
-	repo, ok := subTaskCtx.GetData().(*parser.GitRepo)
+func getGitRepo(subTaskCtx plugin.SubTaskContext) parser.RepoCollector {
+	taskData, ok := subTaskCtx.GetData().(*parser.GitExtractorTaskData)
 	if !ok {
 		panic("git repo reference not found on context")
 	}
-	return repo
+	if taskData.GitRepo == nil {
+		panic("git repo is empty, please check subtask: clone repo")
+	}
+	return taskData.GitRepo
 }
 
 var CollectGitCommitMeta = plugin.SubTaskMeta{
-	Name:             "collectGitCommits",
+	Name:             "Collect Commits",
 	EntryPoint:       CollectGitCommits,
 	EnabledByDefault: true,
 	Description:      "collect git commits into Domain Layer Tables",
 	DomainTypes:      []string{plugin.DOMAIN_TYPE_CODE, plugin.DOMAIN_TYPE_CROSS},
+	Dependencies:     []*plugin.SubTaskMeta{&CloneGitRepoMeta},
 }
 
 var CollectGitBranchMeta = plugin.SubTaskMeta{
-	Name:             "collectGitBranches",
+	Name:             "Collect Branches",
 	EntryPoint:       CollectGitBranches,
 	EnabledByDefault: true,
 	Description:      "collect git branch into Domain Layer Tables",
 	DomainTypes:      []string{plugin.DOMAIN_TYPE_CODE},
+	Dependencies:     []*plugin.SubTaskMeta{&CloneGitRepoMeta},
 }
 
 var CollectGitTagMeta = plugin.SubTaskMeta{
-	Name:             "collectGitTags",
+	Name:             "Collect Tags",
 	EntryPoint:       CollectGitTags,
 	EnabledByDefault: true,
 	Description:      "collect git tag into Domain Layer Tables",
 	DomainTypes:      []string{plugin.DOMAIN_TYPE_CODE},
+	Dependencies:     []*plugin.SubTaskMeta{&CloneGitRepoMeta},
 }
 
 var CollectGitDiffLineMeta = plugin.SubTaskMeta{
-	Name:             "collectDiffLine",
+	Name:             "Collect DiffLine",
 	EntryPoint:       CollectGitDiffLines,
 	EnabledByDefault: false,
 	Description:      "collect git commit diff line into Domain Layer Tables",
 	DomainTypes:      []string{plugin.DOMAIN_TYPE_CODE},
+	Dependencies:     []*plugin.SubTaskMeta{&CloneGitRepoMeta},
 }

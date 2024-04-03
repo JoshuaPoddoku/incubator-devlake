@@ -24,7 +24,11 @@ export const Title = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 36px;
+`;
+
+export const Description = styled.p`
+  margin-top: 12px;
+  margin-bottom: 16px;
 `;
 
 export const Content = styled.div``;
@@ -35,6 +39,8 @@ export const Breadcrumbs = styled.ul`
 `;
 
 export const Breadcrumb = styled.li`
+  display: flex;
+  align-items: center;
   font-size: 24px;
   font-weight: 600;
 
@@ -42,10 +48,6 @@ export const Breadcrumb = styled.li`
     display: flex;
     align-items: center;
     color: #292b3f;
-
-    .bp4-icon {
-      margin: 0 10px;
-    }
   }
 `;
 export const Extra = styled.div``;

@@ -18,22 +18,25 @@ limitations under the License.
 package devops
 
 import (
-	"time"
+	"github.com/spf13/cast"
+	"strings"
 
 	"github.com/apache/incubator-devlake/core/models/domainlayer"
 )
 
 type CICDPipeline struct {
 	domainlayer.DomainEntity
-	Name         string `gorm:"type:varchar(255)"`
-	Result       string `gorm:"type:varchar(100)"`
-	Status       string `gorm:"type:varchar(100)"`
-	Type         string `gorm:"type:varchar(100);comment: to indicate this is CI or CD"`
-	DurationSec  uint64
-	Environment  string `gorm:"type:varchar(255)"`
-	CreatedDate  time.Time
-	FinishedDate *time.Time
-	CicdScopeId  string `gorm:"index;type:varchar(255)"`
+	Name              string `gorm:"type:varchar(255)"`
+	Result            string `gorm:"type:varchar(100)"`
+	Status            string `gorm:"type:varchar(100)"`
+	OriginalStatus    string `gorm:"type:varchar(100)"`
+	OriginalResult    string `gorm:"type:varchar(100)"`
+	Type              string `gorm:"type:varchar(100);comment: to indicate this is CI or CD"`
+	DurationSec       float64
+	QueuedDurationSec *float64
+	Environment       string `gorm:"type:varchar(255)"`
+	TaskDatesInfo
+	CicdScopeId string `gorm:"index;type:varchar(255)"`
 }
 
 func (CICDPipeline) TableName() string {
@@ -44,64 +47,70 @@ func (CICDPipeline) TableName() string {
 const (
 	RESULT_SUCCESS = "SUCCESS"
 	RESULT_FAILURE = "FAILURE"
-	RESULT_ABORT   = "ABORT"
-	RESULT_MANUAL  = "MANUAL"
-	RESULT_SKIPPED = "SKIPPED"
+	RESULT_DEFAULT = ""
 )
 
 // this is for the field `status` in table.cicd_pipelines and table.cicd_tasks
 const (
 	STATUS_IN_PROGRESS = "IN_PROGRESS"
 	STATUS_DONE        = "DONE"
+	STATUS_OTHER       = "OTHER"
 )
 
 type ResultRule struct {
 	Success []string
-	Failed  []string
-	Abort   []string
-	Manual  []string
-	Skipped []string
+	Failure []string
 	Default string
 }
-type StatusRule[T comparable] struct {
-	InProgress []T
-	Done       []T
-	Manual     []T
+
+type StatusRule struct {
+	InProgress []string
+	Done       []string
 	Default    string
 }
 
-// GetResult compare the input with rule for return the enmu value of result
+type StatusRuleCommon[T comparable] struct {
+	InProgress []T
+	Done       []T
+	Default    string
+}
+
+// GetResult compare the input with rule for return the enum value of result case-insensitively.
 func GetResult(rule *ResultRule, input interface{}) string {
 	for _, suc := range rule.Success {
-		if suc == input {
+		if strings.EqualFold(suc, cast.ToString(input)) {
 			return RESULT_SUCCESS
 		}
 	}
-	for _, fail := range rule.Failed {
-		if fail == input {
+	for _, fail := range rule.Failure {
+		if strings.EqualFold(fail, cast.ToString(input)) {
 			return RESULT_FAILURE
-		}
-	}
-	for _, abort := range rule.Abort {
-		if abort == input {
-			return RESULT_ABORT
-		}
-	}
-	for _, manual := range rule.Manual {
-		if manual == input {
-			return RESULT_MANUAL
-		}
-	}
-	for _, skipped := range rule.Skipped {
-		if skipped == input {
-			return RESULT_SKIPPED
 		}
 	}
 	return rule.Default
 }
 
-// GetStatus compare the input with rule for return the enmu value of status
-func GetStatus[T comparable](rule *StatusRule[T], input T) string {
+// GetStatus compare the input with rule for return the enum value of status
+func GetStatus(rule *StatusRule, input interface{}) string {
+	for _, inProgress := range rule.InProgress {
+		if strings.EqualFold(inProgress, cast.ToString(input)) {
+			return STATUS_IN_PROGRESS
+		}
+	}
+	for _, done := range rule.Done {
+		if strings.EqualFold(done, cast.ToString(input)) {
+			return STATUS_DONE
+		}
+	}
+	return rule.Default
+}
+
+// GetStatusCommon compare the input with rule for return the enum value of status.
+// If T is string, it is case-sensitivity.
+func GetStatusCommon[T comparable](rule *StatusRuleCommon[T], input T) string {
+	if rule.Default == "" {
+		rule.Default = STATUS_OTHER
+	}
 	for _, inp := range rule.InProgress {
 		if inp == input {
 			return STATUS_IN_PROGRESS
@@ -110,11 +119,6 @@ func GetStatus[T comparable](rule *StatusRule[T], input T) string {
 	for _, done := range rule.Done {
 		if done == input {
 			return STATUS_DONE
-		}
-	}
-	for _, manual := range rule.Manual {
-		if manual == input {
-			return RESULT_MANUAL
 		}
 	}
 	return rule.Default

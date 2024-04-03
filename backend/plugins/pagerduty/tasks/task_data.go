@@ -18,26 +18,23 @@ limitations under the License.
 package tasks
 
 import (
-	"time"
-
 	"github.com/apache/incubator-devlake/core/errors"
 	"github.com/apache/incubator-devlake/helpers/pluginhelper/api"
 	"github.com/apache/incubator-devlake/plugins/pagerduty/models"
 )
 
 type PagerDutyOptions struct {
-	ConnectionId uint64   `json:"connectionId"`
-	TimeAfter    string   `json:"time_after,omitempty"`
-	ServiceId    string   `json:"service_id,omitempty"`
-	ServiceName  string   `json:"service_name,omitempty"`
-	Tasks        []string `json:"tasks,omitempty"`
+	ConnectionId         uint64   `json:"connectionId"`
+	ServiceId            string   `json:"service_id,omitempty"`
+	ServiceName          string   `json:"service_name,omitempty"`
+	Tasks                []string `json:"tasks,omitempty"`
+	api.CollectorOptions `mapstructure:",squash"`
 	*models.PagerdutyScopeConfig
 }
 
 type PagerDutyTaskData struct {
-	Options   *PagerDutyOptions
-	TimeAfter *time.Time
-	Client    api.RateLimitedApiClient
+	Options *PagerDutyOptions
+	Client  api.RateLimitedApiClient
 }
 
 func (p *PagerDutyOptions) GetParams() any {

@@ -18,8 +18,12 @@ limitations under the License.
 package api
 
 import (
+	"database/sql"
+	"github.com/apache/incubator-devlake/core/dal"
+	"gorm.io/gorm/migrator"
 	"testing"
 
+	coreModels "github.com/apache/incubator-devlake/core/models"
 	"github.com/apache/incubator-devlake/core/models/common"
 	"github.com/apache/incubator-devlake/core/models/domainlayer"
 	"github.com/apache/incubator-devlake/core/models/domainlayer/ticket"
@@ -38,22 +42,21 @@ func TestMakeDataSourcePipelinePlanV200(t *testing.T) {
 	mockMeta.On("Name").Return("dummy").Maybe()
 	err := plugin.RegisterPlugin("tapd", mockMeta)
 	assert.Nil(t, err)
-	bs := &plugin.BlueprintScopeV200{
-		Id: "10",
+	bs := &coreModels.BlueprintScope{
+		ScopeId: "10",
 	}
-	syncPolicy := &plugin.BlueprintSyncPolicy{}
-	bpScopes := make([]*plugin.BlueprintScopeV200, 0)
+	bpScopes := make([]*coreModels.BlueprintScope, 0)
 	bpScopes = append(bpScopes, bs)
-	plan := make(plugin.PipelinePlan, len(bpScopes))
+	plan := make(coreModels.PipelinePlan, len(bpScopes))
 	mockBasicRes(t)
 
-	plan, err = makeDataSourcePipelinePlanV200(nil, plan, bpScopes, uint64(1), syncPolicy)
+	plan, err = makeDataSourcePipelinePlanV200(nil, plan, bpScopes, uint64(1))
 	assert.Nil(t, err)
 	scopes, err := makeScopesV200(bpScopes, uint64(1))
 	assert.Nil(t, err)
 
-	expectPlan := plugin.PipelinePlan{
-		plugin.PipelineStage{
+	expectPlan := coreModels.PipelinePlan{
+		coreModels.PipelineStage{
 			{
 				Plugin:   "tapd",
 				Subtasks: []string{},
@@ -81,15 +84,26 @@ func TestMakeDataSourcePipelinePlanV200(t *testing.T) {
 
 func mockBasicRes(t *testing.T) {
 	tapdWorkspace := &models.TapdWorkspace{
-		ConnectionId: 1,
-		Id:           10,
-		Name:         "a",
+		Scope: common.Scope{
+			ConnectionId: 1,
+		},
+		Id:   10,
+		Name: "a",
 	}
 	scopeConfig := &models.TapdScopeConfig{
 		ScopeConfig: common.ScopeConfig{
 			Entities: []string{plugin.DOMAIN_TYPE_TICKET},
 		},
 	}
+	var testColumTypes = []dal.ColumnMeta{
+		migrator.ColumnType{
+			NameValue: sql.NullString{
+				String: "abc",
+				Valid:  true,
+			},
+		},
+	}
+
 	// Refresh Global Variables and set the sql mock
 	mockRes := unithelper.DummyBasicRes(func(mockDal *mockdal.Dal) {
 		mockDal.On("First", mock.AnythingOfType("*models.TapdScopeConfig"), mock.Anything).Run(func(args mock.Arguments) {
@@ -100,6 +114,14 @@ func mockBasicRes(t *testing.T) {
 			dst := args.Get(0).(*models.TapdWorkspace)
 			*dst = *tapdWorkspace
 		}).Return(nil)
+		mockDal.On("GetPrimarykeyColumns", mock.AnythingOfType("*models.TapdConnection"), mock.Anything).Run(nil).Return(
+			testColumTypes, nil)
+		mockDal.On("GetColumns", mock.AnythingOfType("models.TapdConnection"), mock.Anything).Run(nil).Return(
+			testColumTypes, nil)
+		mockDal.On("GetColumns", mock.AnythingOfType("models.TapdWorkspace"), mock.Anything).Run(nil).Return(
+			testColumTypes, nil)
+		mockDal.On("GetColumns", mock.AnythingOfType("models.TapdScopeConfig"), mock.Anything).Run(nil).Return(
+			testColumTypes, nil)
 	})
 	p := mockplugin.NewPluginMeta(t)
 	p.On("Name").Return("dummy").Maybe()

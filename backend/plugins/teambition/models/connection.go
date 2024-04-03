@@ -20,6 +20,7 @@ package models
 import (
 	"fmt"
 	"github.com/apache/incubator-devlake/core/errors"
+	"github.com/apache/incubator-devlake/core/utils"
 	helper "github.com/apache/incubator-devlake/helpers/pluginhelper/api"
 	"github.com/golang-jwt/jwt/v5"
 	"net/http"
@@ -34,10 +35,32 @@ type TeambitionConn struct {
 	TenantType            string `mapstructure:"tenantType" validate:"required" json:"tenantType"`
 }
 
+func (tc TeambitionConn) Sanitize() TeambitionConn {
+	tc.SecretKey = utils.SanitizeString(tc.SecretKey)
+	return tc
+}
+
 // TeambitionConnection holds TeambitionConn plus ID/Name for database storage
 type TeambitionConnection struct {
 	helper.BaseConnection `mapstructure:",squash"`
 	TeambitionConn        `mapstructure:",squash"`
+}
+
+func (connection *TeambitionConnection) MergeFromRequest(target *TeambitionConnection, body map[string]interface{}) error {
+	secretKey := target.SecretKey
+	if err := helper.DecodeMapStruct(body, target, true); err != nil {
+		return err
+	}
+	modifiedSecretKey := target.SecretKey
+	if modifiedSecretKey == "" || modifiedSecretKey == utils.SanitizeString(secretKey) {
+		target.SecretKey = secretKey
+	}
+	return nil
+}
+
+func (connection TeambitionConnection) Sanitize() TeambitionConnection {
+	connection.TeambitionConn = connection.TeambitionConn.Sanitize()
+	return connection
 }
 
 func (tc *TeambitionConn) SetupAuthentication(req *http.Request) errors.Error {

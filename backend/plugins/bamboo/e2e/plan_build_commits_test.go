@@ -33,7 +33,7 @@ func TestBambooPlanBuildCommitsDataFlow(t *testing.T) {
 	var bamboo impl.Bamboo
 	dataflowTester := e2ehelper.NewDataFlowTester(t, "bamboo", bamboo)
 
-	taskData := &tasks.BambooTaskData{
+	taskData := &tasks.BambooOptions{
 		Options: &models.BambooOptions{
 			ConnectionId: 1,
 			PlanKey:      "TEST-PLA2",
@@ -42,7 +42,9 @@ func TestBambooPlanBuildCommitsDataFlow(t *testing.T) {
 				ProductionPattern: "(?i)compile",
 			},
 		},
+		ApiClient: getFakeAPIClient(),
 	}
+
 	dataflowTester.ImportCsvIntoTabler("./snapshot_tables/_tool_bamboo_plan_build_commits.csv", &models.BambooPlanBuildVcsRevision{})
 	dataflowTester.ImportCsvIntoTabler("./snapshot_tables/_tool_bamboo_plan_builds.csv", &models.BambooPlanBuild{})
 

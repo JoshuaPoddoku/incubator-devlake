@@ -31,7 +31,7 @@ import (
 )
 
 var ConvertPrCommentsMeta = plugin.SubTaskMeta{
-	Name:             "convertPullRequestComments",
+	Name:             "Convert PR Comments",
 	EntryPoint:       ConvertPullRequestComments,
 	EnabledByDefault: true,
 	Description:      "ConvertPullRequestComments data from Bitbucket api",
@@ -67,11 +67,10 @@ func ConvertPullRequestComments(taskCtx plugin.SubTaskContext) errors.Error {
 				},
 				PullRequestId: prIdGen.Generate(prComment.ConnectionId, prComment.RepoId, prComment.PullRequestId),
 				AccountId:     accountIdGen.Generate(prComment.ConnectionId, prComment.AuthorId),
-				CreatedDate:   prComment.CreatedAt,
+				CreatedDate:   prComment.BitbucketCreatedAt,
 				Body:          prComment.Body,
 				Type:          prComment.Type,
 				CommitSha:     "",
-				Position:      0,
 			}
 			return []interface{}{
 				domainPrComment,

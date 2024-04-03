@@ -17,18 +17,15 @@
  */
 
 import { DOC_URL } from '@/release';
+import { IPluginConfig } from '@/types';
 
-import type { PluginConfigType } from '../../types';
-import { PluginType } from '../../types';
+import Icon from './assets/icon.svg?react';
 
-import Icon from './assets/icon.svg';
-
-export const BitBucketConfig: PluginConfigType = {
-  type: PluginType.Connection,
+export const BitbucketConfig: IPluginConfig = {
   plugin: 'bitbucket',
-  name: 'BitBucket',
-  icon: Icon,
-  sort: 5,
+  name: 'Bitbucket Cloud',
+  icon: ({ color }) => <Icon fill={color} />,
+  sort: 3,
   connection: {
     docLink: DOC_URL.PLUGIN.BITBUCKET.BASIS,
     initialValues: {
@@ -38,10 +35,8 @@ export const BitBucketConfig: PluginConfigType = {
       'name',
       {
         key: 'endpoint',
-        multipleVersions: {
-          cloud: 'https://api.bitbucket.org/2.0/',
-          server: '',
-        },
+        subLabel: 'You do not need to enter the endpoint URL, because all versions use the same URL.',
+        disabled: true,
       },
       'username',
       {
@@ -52,18 +47,18 @@ export const BitBucketConfig: PluginConfigType = {
       {
         key: 'rateLimitPerHour',
         subLabel:
-          'By default, DevLake uses dynamic rate limit for optimized data collection for BitBucket. But you can adjust the collection speed by entering a fixed value.',
+          'By default, DevLake uses dynamic rate limit for optimized data collection for Bitbucket. But you can adjust the collection speed by entering a fixed value.',
         learnMore: DOC_URL.PLUGIN.BITBUCKET.RATE_LIMIT,
         externalInfo:
-          'The maximum rate limit for different entities in BitBucket Cloud is 60,000 or 1,000 requests/hour.',
+          'The maximum rate limit for different entities in Bitbucket Cloud is 60,000 or 1,000 requests/hour.',
         defaultValue: 1000,
       },
     ],
   },
   dataScope: {
-    millerColumns: {
-      title: 'Repositories *',
-      subTitle: 'Select the repositories you would like to sync.',
+    searchPlaceholder: 'Enter the keywords to search for repositories that you have read access',
+    title: 'Repositories',
+    millerColumn: {
       columnCount: 2,
     },
   },

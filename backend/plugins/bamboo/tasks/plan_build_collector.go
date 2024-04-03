@@ -25,7 +25,7 @@ import (
 	helper "github.com/apache/incubator-devlake/helpers/pluginhelper/api"
 )
 
-const RAW_PLAN_BUILD_TABLE = "bamboo_api_plan_build"
+const RAW_PLAN_BUILD_TABLE = "bamboo_api_plan_builds"
 
 var _ plugin.SubTaskEntryPoint = CollectPlanBuild
 
@@ -43,7 +43,7 @@ func CollectPlanBuild(taskCtx plugin.SubTaskContext) errors.Error {
 	if err != nil {
 		return err
 	}
-	return collector.Execute()
+	return covertError(collector.Execute())
 }
 
 var CollectPlanBuildMeta = plugin.SubTaskMeta{

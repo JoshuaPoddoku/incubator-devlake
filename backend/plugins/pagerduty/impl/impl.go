@@ -19,11 +19,11 @@ package impl
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/apache/incubator-devlake/core/context"
 	"github.com/apache/incubator-devlake/core/dal"
 	"github.com/apache/incubator-devlake/core/errors"
+	coreModels "github.com/apache/incubator-devlake/core/models"
 	"github.com/apache/incubator-devlake/core/plugin"
 	helper "github.com/apache/incubator-devlake/helpers/pluginhelper/api"
 	"github.com/apache/incubator-devlake/plugins/pagerduty/api"
@@ -89,6 +89,7 @@ func (p PagerDuty) GetTablesInfo() []dal.Tabler {
 		&models.User{},
 		&models.Assignment{},
 		&models.PagerDutyConnection{},
+		&models.PagerdutyScopeConfig{},
 	}
 }
 
@@ -107,17 +108,9 @@ func (p PagerDuty) PrepareTaskData(taskCtx plugin.TaskContext, options map[strin
 	if err != nil {
 		return nil, errors.Default.Wrap(err, "unable to get Pagerduty connection by the given connection ID")
 	}
-	var timeAfter *time.Time
-	if op.TimeAfter != "" {
-		convertedTime, err := errors.Convert01(time.Parse(time.RFC3339, op.TimeAfter))
-		if err != nil {
-			return nil, errors.BadInput.Wrap(err, fmt.Sprintf("invalid value for `timeAfter`: %s", timeAfter))
-		}
-		timeAfter = &convertedTime
-	}
-	client, err := helper.NewApiClient(taskCtx.GetContext(), connection.Endpoint, map[string]string{
-		"Authorization": fmt.Sprintf("Token %s", connection.Token),
-	}, 0, connection.Proxy, taskCtx)
+
+	client, err := helper.NewApiClientFromConnection(taskCtx.GetContext(), taskCtx, connection)
+
 	if err != nil {
 		return nil, err
 	}
@@ -126,13 +119,12 @@ func (p PagerDuty) PrepareTaskData(taskCtx plugin.TaskContext, options map[strin
 		return nil, err
 	}
 	return &tasks.PagerDutyTaskData{
-		Options:   op,
-		TimeAfter: timeAfter,
-		Client:    asyncClient,
+		Options: op,
+		Client:  asyncClient,
 	}, nil
 }
 
-// PkgPath information lost when compiled as plugin(.so)
+// RootPkgPath information lost when compiled as plugin(.so)
 func (p PagerDuty) RootPkgPath() string {
 	return "github.com/apache/incubator-devlake/plugins/pagerduty"
 }
@@ -155,6 +147,9 @@ func (p PagerDuty) ApiResources() map[string]map[string]plugin.ApiResourceHandle
 			"PATCH":  api.PatchConnection,
 			"DELETE": api.DeleteConnection,
 		},
+		"connections/:connectionId/test": {
+			"POST": api.TestExistingConnection,
+		},
 		"connections/:connectionId/remote-scopes": {
 			"GET": api.RemoteScopes,
 		},
@@ -170,12 +165,17 @@ func (p PagerDuty) ApiResources() map[string]map[string]plugin.ApiResourceHandle
 			"PATCH":  api.UpdateScope,
 			"DELETE": api.DeleteScope,
 		},
+		"connections/:connectionId/scopes/:scopeId/latest-sync-state": {
+			"GET": api.GetScopeLatestSyncState,
+		},
 	}
 }
 
-func (p PagerDuty) MakeDataSourcePipelinePlanV200(connectionId uint64, scopes []*plugin.BlueprintScopeV200, syncPolicy plugin.BlueprintSyncPolicy,
-) (plugin.PipelinePlan, []plugin.Scope, errors.Error) {
-	return api.MakeDataSourcePipelinePlanV200(p.SubTaskMetas(), connectionId, scopes, &syncPolicy)
+func (p PagerDuty) MakeDataSourcePipelinePlanV200(
+	connectionId uint64,
+	scopes []*coreModels.BlueprintScope,
+) (coreModels.PipelinePlan, []plugin.Scope, errors.Error) {
+	return api.MakeDataSourcePipelinePlanV200(p.SubTaskMetas(), connectionId, scopes)
 }
 
 func (p PagerDuty) Close(taskCtx plugin.TaskContext) errors.Error {

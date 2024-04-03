@@ -40,7 +40,7 @@ func init() {
 const RAW_PULL_REQUEST_TABLE = "github_api_pull_requests"
 
 var CollectApiPullRequestsMeta = plugin.SubTaskMeta{
-	Name:             "collectApiPullRequests",
+	Name:             "Collect Pull Requests",
 	EntryPoint:       CollectApiPullRequests,
 	EnabledByDefault: true,
 	Description:      "Collect PullRequests data from Github api, supports both timeFilter and diffSync.",
@@ -72,7 +72,6 @@ func CollectApiPullRequests(taskCtx plugin.SubTaskContext) errors.Error {
 			Table: RAW_PULL_REQUEST_TABLE,
 		},
 		ApiClient: data.ApiClient,
-		TimeAfter: data.TimeAfter, // set to nil to disable timeFilter
 		CollectNewRecordsByList: helper.FinalizableApiCollectorListArgs{
 			PageSize:    100,
 			Concurrency: 10,

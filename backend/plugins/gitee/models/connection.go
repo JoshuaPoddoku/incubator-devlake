@@ -18,6 +18,7 @@ limitations under the License.
 package models
 
 import (
+	"github.com/apache/incubator-devlake/core/utils"
 	"net/http"
 
 	"github.com/apache/incubator-devlake/core/errors"
@@ -40,10 +41,27 @@ type GiteeConn struct {
 	GiteeAccessToken      `mapstructure:",squash"`
 }
 
+func (connection GiteeConn) Sanitize() GiteeConn {
+	connection.Token = utils.SanitizeString(connection.Token)
+	return connection
+}
+
 // GiteeConnection holds GiteeConn plus ID/Name for database storage
 type GiteeConnection struct {
 	helper.BaseConnection `mapstructure:",squash"`
 	GiteeConn             `mapstructure:",squash"`
+}
+
+func (connection *GiteeConnection) MergeFromRequest(target *GiteeConnection, body map[string]interface{}) error {
+	token := target.Token
+	if err := helper.DecodeMapStruct(body, target, true); err != nil {
+		return err
+	}
+	modifiedToken := target.Token
+	if modifiedToken == "" || modifiedToken == utils.SanitizeString(token) {
+		target.Token = token
+	}
+	return nil
 }
 
 type ApiUserResponse struct {
@@ -66,4 +84,9 @@ type GiteeScopeConfig struct {
 
 func (GiteeConnection) TableName() string {
 	return "_tool_gitee_connections"
+}
+
+func (connection GiteeConnection) Sanitize() GiteeConnection {
+	connection.GiteeConn = connection.GiteeConn.Sanitize()
+	return connection
 }

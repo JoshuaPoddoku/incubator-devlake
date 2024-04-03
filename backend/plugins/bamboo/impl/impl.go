@@ -23,6 +23,7 @@ import (
 	"github.com/apache/incubator-devlake/core/context"
 	"github.com/apache/incubator-devlake/core/dal"
 	"github.com/apache/incubator-devlake/core/errors"
+	coreModels "github.com/apache/incubator-devlake/core/models"
 	"github.com/apache/incubator-devlake/core/models/domainlayer/devops"
 	"github.com/apache/incubator-devlake/core/plugin"
 	helper "github.com/apache/incubator-devlake/helpers/pluginhelper/api"
@@ -48,7 +49,6 @@ type Bamboo struct{}
 
 func (p Bamboo) Init(br context.BasicRes) errors.Error {
 	api.Init(br, p)
-
 	return nil
 }
 
@@ -64,8 +64,11 @@ func (p Bamboo) ScopeConfig() dal.Tabler {
 	return &models.BambooScopeConfig{}
 }
 
-func (p Bamboo) MakeDataSourcePipelinePlanV200(connectionId uint64, scopes []*plugin.BlueprintScopeV200, syncPolicy plugin.BlueprintSyncPolicy) (plugin.PipelinePlan, []plugin.Scope, errors.Error) {
-	return api.MakePipelinePlanV200(p.SubTaskMetas(), connectionId, scopes, &syncPolicy)
+func (p Bamboo) MakeDataSourcePipelinePlanV200(
+	connectionId uint64,
+	scopes []*coreModels.BlueprintScope,
+) (coreModels.PipelinePlan, []plugin.Scope, errors.Error) {
+	return api.MakePipelinePlanV200(p.SubTaskMetas(), connectionId, scopes)
 }
 
 func (p Bamboo) GetTablesInfo() []dal.Tabler {
@@ -113,7 +116,8 @@ func (p Bamboo) SubTaskMetas() []plugin.SubTaskMeta {
 		tasks.ConvertJobBuildsMeta,
 		tasks.ConvertPlanBuildsMeta,
 		tasks.ConvertPlanVcsMeta,
-		tasks.ConvertDeployBuildsMeta,
+		tasks.ConvertDeployBuildsToDeploymentCommitsMeta,
+		tasks.ConvertDeployBuildsToDeploymentMeta,
 	}
 }
 
@@ -178,17 +182,17 @@ func (p Bamboo) PrepareTaskData(taskCtx plugin.TaskContext, options map[string]i
 	if err := regexEnricher.TryAdd(devops.PRODUCTION, op.ProductionPattern); err != nil {
 		return nil, errors.BadInput.Wrap(err, "invalid value for `productionPattern`")
 	}
-	if err := regexEnricher.TryAdd(models.ENV_NAME_PATTERN, op.EnvNamePattern); err != nil {
+	if err := regexEnricher.TryAdd(devops.ENV_NAME_PATTERN, op.EnvNamePattern); err != nil {
 		return nil, errors.BadInput.Wrap(err, "invalid value for `envNamePattern`")
 	}
-	return &tasks.BambooTaskData{
+	return &tasks.BambooOptions{
 		Options:       op,
 		ApiClient:     apiClient,
 		RegexEnricher: regexEnricher,
 	}, nil
 }
 
-// PkgPath information lost when compiled as plugin(.so)
+// RootPkgPath information lost when compiled as plugin(.so)
 func (p Bamboo) RootPkgPath() string {
 	return "github.com/apache/incubator-devlake/plugins/bamboo"
 }
@@ -211,18 +215,24 @@ func (p Bamboo) ApiResources() map[string]map[string]plugin.ApiResourceHandler {
 			"PATCH":  api.PatchConnection,
 			"DELETE": api.DeleteConnection,
 		},
+		"connections/:connectionId/test": {
+			"POST": api.TestExistingConnection,
+		},
 		"connections/:connectionId/scope-configs": {
 			"POST": api.CreateScopeConfig,
 			"GET":  api.GetScopeConfigList,
 		},
 		"connections/:connectionId/scope-configs/:id": {
-			"PATCH":  api.UpdateScopeConfig,
+			"PATCH":  api.PatchScopeConfig,
 			"GET":    api.GetScopeConfig,
 			"DELETE": api.DeleteScopeConfig,
 		},
 		"connections/:connectionId/scopes": {
 			"GET": api.GetScopeList,
-			"PUT": api.PutScope,
+			"PUT": api.PutScopes,
+		},
+		"connections/:connectionId/scopes/:scopeId/latest-sync-state": {
+			"GET": api.GetScopeLatestSyncState,
 		},
 		"connections/:connectionId/remote-scopes": {
 			"GET": api.RemoteScopes,
@@ -232,14 +242,17 @@ func (p Bamboo) ApiResources() map[string]map[string]plugin.ApiResourceHandler {
 		},
 		"connections/:connectionId/scopes/:scopeId": {
 			"GET":    api.GetScope,
-			"PATCH":  api.UpdateScope,
+			"PATCH":  api.PatchScope,
 			"DELETE": api.DeleteScope,
+		},
+		"connections/:connectionId/proxy/rest/*path": {
+			"GET": api.Proxy,
 		},
 	}
 }
 
 func (p Bamboo) Close(taskCtx plugin.TaskContext) errors.Error {
-	data, ok := taskCtx.GetData().(*tasks.BambooTaskData)
+	data, ok := taskCtx.GetData().(*tasks.BambooOptions)
 	if !ok {
 		return errors.Default.New(fmt.Sprintf("GetData failed when try to close %+v", taskCtx))
 	}

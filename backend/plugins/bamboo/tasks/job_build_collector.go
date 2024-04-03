@@ -27,7 +27,7 @@ import (
 	"github.com/apache/incubator-devlake/plugins/bamboo/models"
 )
 
-const RAW_JOB_BUILD_TABLE = "bamboo_api_job_build"
+const RAW_JOB_BUILD_TABLE = "bamboo_api_job_builds"
 
 var _ plugin.SubTaskEntryPoint = CollectJobBuild
 
@@ -70,7 +70,7 @@ func CollectJobBuild(taskCtx plugin.SubTaskContext) errors.Error {
 	if err != nil {
 		return err
 	}
-	return collector.Execute()
+	return covertError(collector.Execute())
 }
 
 var CollectJobBuildMeta = plugin.SubTaskMeta{

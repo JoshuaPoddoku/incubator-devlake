@@ -65,6 +65,23 @@ func (AeConnection) TableName() string {
 	return "_tool_ae_connections"
 }
 
+func (connection AeConnection) Sanitize() AeConnection {
+	connection.AeAppKey.SecretKey = utils.SanitizeString(connection.AeAppKey.SecretKey)
+	return connection
+}
+
+func (connection *AeConnection) MergeFromRequest(target *AeConnection, body map[string]interface{}) error {
+	secretKey := target.SecretKey
+	if err := helper.DecodeMapStruct(body, target, true); err != nil {
+		return err
+	}
+	modifiedSecretKey := target.SecretKey
+	if modifiedSecretKey == "" || modifiedSecretKey == utils.SanitizeString(secretKey) {
+		target.SecretKey = secretKey
+	}
+	return nil
+}
+
 func signRequest(query url.Values, appId, secretKey, nonceStr, timestamp string) string {
 	// clone query because we need to add items
 	kvs := make([]string, 0, len(query)+3)

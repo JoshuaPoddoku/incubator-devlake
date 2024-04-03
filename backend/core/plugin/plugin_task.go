@@ -22,6 +22,7 @@ import (
 
 	corecontext "github.com/apache/incubator-devlake/core/context"
 	"github.com/apache/incubator-devlake/core/errors"
+	"github.com/apache/incubator-devlake/core/models"
 )
 
 type ProgressType int
@@ -35,11 +36,13 @@ const (
 )
 
 type RunningProgress struct {
-	Type          ProgressType
-	Current       int
-	Total         int
-	SubTaskName   string
-	SubTaskNumber int
+	Type                 ProgressType
+	Current              int
+	Total                int
+	SubTaskName          string
+	SubTaskNumber        int
+	CollectSubtaskNumber int
+	OtherSubtaskNumber   int
 } // nolint
 
 // ExecContext This interface define all resources that needed for task/subtask execution
@@ -62,6 +65,8 @@ type SubTaskContext interface {
 type TaskContext interface {
 	ExecContext
 	SetData(data interface{})
+	SetSyncPolicy(syncPolicy *models.SyncPolicy)
+	SyncPolicy() *models.SyncPolicy
 	SubTaskContext(subtask string) (SubTaskContext, errors.Error)
 }
 
@@ -101,6 +106,7 @@ type SubTaskMeta struct {
 	Dependencies     []*SubTaskMeta
 	DependencyTables []string
 	ProductTables    []string
+	ForceRunOnResume bool // Should a subtask be ran dispite it was finished before
 }
 
 // PluginTask Implement this interface to let framework run tasks for you

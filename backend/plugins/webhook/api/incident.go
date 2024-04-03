@@ -89,7 +89,6 @@ func PostIssue(input *plugin.ApiResourceInput) (*plugin.ApiResourceOutput, error
 	if err != nil {
 		return &plugin.ApiResourceOutput{Body: err.Error(), Status: http.StatusBadRequest}, nil
 	}
-
 	db := basicRes.GetDal()
 	domainIssue := &ticket.Issue{
 		DomainEntity: domainlayer.DomainEntity{
@@ -103,15 +102,15 @@ func PostIssue(input *plugin.ApiResourceInput) (*plugin.ApiResourceOutput, error
 		Type:                    request.Type,
 		Status:                  request.Status,
 		OriginalStatus:          request.OriginalStatus,
-		StoryPoint:              request.StoryPoint,
+		StoryPoint:              &request.StoryPoint,
 		ResolutionDate:          request.ResolutionDate,
 		CreatedDate:             request.CreatedDate,
 		UpdatedDate:             request.UpdatedDate,
-		LeadTimeMinutes:         int64(request.LeadTimeMinutes),
+		LeadTimeMinutes:         &request.LeadTimeMinutes,
 		Priority:                request.Priority,
-		OriginalEstimateMinutes: request.OriginalEstimateMinutes,
-		TimeSpentMinutes:        request.TimeSpentMinutes,
-		TimeRemainingMinutes:    request.TimeRemainingMinutes,
+		OriginalEstimateMinutes: &request.OriginalEstimateMinutes,
+		TimeSpentMinutes:        &request.TimeSpentMinutes,
+		TimeRemainingMinutes:    &request.TimeRemainingMinutes,
 		CreatorName:             request.CreatorName,
 		AssigneeName:            request.AssigneeName,
 		Severity:                request.Severity,

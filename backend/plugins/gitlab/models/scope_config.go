@@ -24,8 +24,6 @@ import (
 
 type GitlabScopeConfig struct {
 	common.ScopeConfig   `mapstructure:",squash" json:",inline" gorm:"embedded"`
-	ConnectionId         uint64            `mapstructure:"connectionId" json:"connectionId"`
-	Name                 string            `gorm:"type:varchar(255);index:idx_name_gitlab,unique" validate:"required" mapstructure:"name" json:"name"`
 	PrType               string            `mapstructure:"prType" json:"prType"`
 	PrComponent          string            `mapstructure:"prComponent" json:"prComponent"`
 	PrBodyClosePattern   string            `mapstructure:"prBodyClosePattern" json:"prBodyClosePattern"`
@@ -37,6 +35,7 @@ type GitlabScopeConfig struct {
 	IssueTypeRequirement string            `mapstructure:"issueTypeRequirement" json:"issueTypeRequirement"`
 	DeploymentPattern    string            `mapstructure:"deploymentPattern" json:"deploymentPattern"`
 	ProductionPattern    string            `mapstructure:"productionPattern,omitempty" json:"productionPattern" gorm:"type:varchar(255)"`
+	EnvNamePattern       string            `mapstructure:"envNamePattern,omitempty" json:"envNamePattern" gorm:"type:varchar(255)"`
 	Refdiff              datatypes.JSONMap `mapstructure:"refdiff,omitempty" json:"refdiff" swaggertype:"object" format:"json"`
 }
 

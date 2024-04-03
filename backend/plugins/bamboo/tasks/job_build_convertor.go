@@ -19,6 +19,7 @@ package tasks
 
 import (
 	"reflect"
+	"time"
 
 	"github.com/apache/incubator-devlake/core/dal"
 	"github.com/apache/incubator-devlake/core/errors"
@@ -62,24 +63,36 @@ func ConvertJobBuilds(taskCtx plugin.SubTaskContext) errors.Error {
 			if line.BuildStartedTime == nil {
 				return nil, nil
 			}
+			createdDate := time.Now()
+			if line.BuildStartedTime != nil {
+				createdDate = *line.BuildStartedTime
+			}
+			queuedDurationSec := float64(line.QueueDuration) / 1e3
 			domainJobBuild := &devops.CICDTask{
 				DomainEntity: domainlayer.DomainEntity{Id: jobBuildIdGen.Generate(data.Options.ConnectionId, line.JobBuildKey)},
 				Name:         line.JobName,
-				StartedDate:  *line.BuildStartedTime,
-				FinishedDate: line.BuildCompletedDate,
-				PipelineId:   planBuildIdGen.Generate(data.Options.ConnectionId, line.PlanBuildKey),
-				CicdScopeId:  planIdGen.Generate(data.Options.ConnectionId, data.Options.PlanKey),
-
+				DurationSec:  float64(line.BuildDuration) / 1e3,
+				TaskDatesInfo: devops.TaskDatesInfo{
+					CreatedDate:  createdDate,
+					QueuedDate:   line.QueueStartedTime,
+					StartedDate:  line.BuildStartedTime,
+					FinishedDate: line.BuildCompletedDate,
+				},
+				QueuedDurationSec: &queuedDurationSec,
+				PipelineId:        planBuildIdGen.Generate(data.Options.ConnectionId, line.PlanBuildKey),
+				CicdScopeId:       planIdGen.Generate(data.Options.ConnectionId, data.Options.PlanKey),
 				Result: devops.GetResult(&devops.ResultRule{
-					Failed:  []string{"Failed"},
-					Success: []string{"Successful"},
-					Default: "",
+					Success: []string{ResultSuccess, ResultSuccessful},
+					Failure: []string{ResultFailed},
+					Default: devops.RESULT_DEFAULT,
 				}, line.BuildState),
-
-				Status: devops.GetStatus(&devops.StatusRule[string]{
-					Done:    []string{"Finished"},
-					Default: devops.STATUS_IN_PROGRESS,
+				OriginalResult: line.BuildState,
+				Status: devops.GetStatus(&devops.StatusRule{
+					Done:       []string{StatusFinished},
+					InProgress: []string{StatusInProgress, StatusPending, StatusQueued},
+					Default:    devops.STATUS_OTHER,
 				}, line.LifeCycleState),
+				OriginalStatus: line.LifeCycleState,
 			}
 
 			domainJobBuild.Type = line.Type

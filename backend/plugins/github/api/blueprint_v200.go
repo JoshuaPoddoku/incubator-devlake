@@ -25,10 +25,9 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
-	"github.com/apache/incubator-devlake/core/dal"
 	"github.com/apache/incubator-devlake/core/errors"
+	coreModels "github.com/apache/incubator-devlake/core/models"
 	"github.com/apache/incubator-devlake/core/models/domainlayer"
 	"github.com/apache/incubator-devlake/core/models/domainlayer/code"
 	"github.com/apache/incubator-devlake/core/models/domainlayer/devops"
@@ -37,15 +36,22 @@ import (
 	"github.com/apache/incubator-devlake/core/plugin"
 	"github.com/apache/incubator-devlake/core/utils"
 	helper "github.com/apache/incubator-devlake/helpers/pluginhelper/api"
-	aha "github.com/apache/incubator-devlake/helpers/pluginhelper/api/apihelperabstract"
+	"github.com/apache/incubator-devlake/helpers/srvhelper"
 	"github.com/apache/incubator-devlake/plugins/github/models"
 	"github.com/apache/incubator-devlake/plugins/github/tasks"
 )
 
-func MakeDataSourcePipelinePlanV200(subtaskMetas []plugin.SubTaskMeta, connectionId uint64, bpScopes []*plugin.BlueprintScopeV200, syncPolicy *plugin.BlueprintSyncPolicy) (plugin.PipelinePlan, []plugin.Scope, errors.Error) {
-	// get the connection info for url
-	connection := &models.GithubConnection{}
-	err := connectionHelper.FirstById(connection, connectionId)
+func MakeDataSourcePipelinePlanV200(
+	subtaskMetas []plugin.SubTaskMeta,
+	connectionId uint64,
+	bpScopes []*coreModels.BlueprintScope,
+) (coreModels.PipelinePlan, []plugin.Scope, errors.Error) {
+	// load connection, scope and scopeConfig from the db
+	connection, err := dsHelper.ConnSrv.FindByPk(connectionId)
+	if err != nil {
+		return nil, nil, err
+	}
+	scopeDetails, err := dsHelper.ScopeSrv.MapScopeDetails(connectionId, bpScopes)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -57,12 +63,11 @@ func MakeDataSourcePipelinePlanV200(subtaskMetas []plugin.SubTaskMeta, connectio
 		return nil, nil, err
 	}
 
-	plan := make(plugin.PipelinePlan, len(bpScopes))
-	plan, err = makeDataSourcePipelinePlanV200(subtaskMetas, plan, bpScopes, connection, syncPolicy)
+	plan, err := makeDataSourcePipelinePlanV200(subtaskMetas, scopeDetails, connection)
 	if err != nil {
 		return nil, nil, err
 	}
-	scopes, err := makeScopesV200(bpScopes, connection)
+	scopes, err := makeScopesV200(scopeDetails, connection)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -72,20 +77,15 @@ func MakeDataSourcePipelinePlanV200(subtaskMetas []plugin.SubTaskMeta, connectio
 
 func makeDataSourcePipelinePlanV200(
 	subtaskMetas []plugin.SubTaskMeta,
-	plan plugin.PipelinePlan,
-	bpScopes []*plugin.BlueprintScopeV200,
+	scopeDetails []*srvhelper.ScopeDetail[models.GithubRepo, models.GithubScopeConfig],
 	connection *models.GithubConnection,
-	syncPolicy *plugin.BlueprintSyncPolicy,
-) (plugin.PipelinePlan, errors.Error) {
-	for i, bpScope := range bpScopes {
+) (coreModels.PipelinePlan, errors.Error) {
+	plan := make(coreModels.PipelinePlan, len(scopeDetails))
+	for i, scopeDetail := range scopeDetails {
+		githubRepo, scopeConfig := scopeDetail.Scope, scopeDetail.ScopeConfig
 		stage := plan[i]
 		if stage == nil {
-			stage = plugin.PipelineStage{}
-		}
-		// get repo and scope config from db
-		githubRepo, scopeConfig, err := scopeHelper.DbHelper().GetScopeAndConfig(connection.ID, bpScope.Id)
-		if err != nil {
-			return nil, err
+			stage = coreModels.PipelineStage{}
 		}
 		// refdiff
 		if scopeConfig != nil && scopeConfig.Refdiff != nil {
@@ -96,7 +96,7 @@ func makeDataSourcePipelinePlanV200(
 			}
 			refdiffOp := scopeConfig.Refdiff
 			refdiffOp["repoId"] = didgen.NewDomainIdGenerator(&models.GithubRepo{}).Generate(connection.ID, githubRepo.GithubId)
-			plan[j] = plugin.PipelineStage{
+			plan[j] = coreModels.PipelineStage{
 				{
 					Plugin:  "refdiff",
 					Options: refdiffOp,
@@ -110,34 +110,29 @@ func makeDataSourcePipelinePlanV200(
 			ConnectionId: githubRepo.ConnectionId,
 			GithubId:     githubRepo.GithubId,
 			Name:         githubRepo.FullName,
+			FullName:     githubRepo.FullName,
 		}
-		if syncPolicy.TimeAfter != nil {
-			op.TimeAfter = syncPolicy.TimeAfter.Format(time.RFC3339)
-		}
-		options, err := tasks.EncodeTaskOptions(op)
-		if err != nil {
-			return nil, err
-		}
-		stage, err = addGithub(subtaskMetas, connection, scopeConfig.Entities, stage, options)
+		stage, err := addGithub(subtaskMetas, connection, scopeConfig.Entities, stage, op)
 		if err != nil {
 			return nil, err
 		}
 
 		// add gitex stage
-		if utils.StringsContains(scopeConfig.Entities, plugin.DOMAIN_TYPE_CODE) {
+		if utils.StringsContains(scopeConfig.Entities, plugin.DOMAIN_TYPE_CODE) || len(scopeConfig.Entities) == 0 {
 			cloneUrl, err := errors.Convert01(url.Parse(githubRepo.CloneUrl))
 			if err != nil {
 				return nil, err
 			}
 			token := strings.Split(connection.Token, ",")[0]
 			cloneUrl.User = url.UserPassword("git", token)
-			stage = append(stage, &plugin.PipelineTask{
+			stage = append(stage, &coreModels.PipelineTask{
 				Plugin: "gitextractor",
 				Options: map[string]interface{}{
-					"url":    cloneUrl.String(),
-					"name":   githubRepo.FullName,
-					"repoId": didgen.NewDomainIdGenerator(&models.GithubRepo{}).Generate(connection.ID, githubRepo.GithubId),
-					"proxy":  connection.Proxy,
+					"url":      cloneUrl.String(),
+					"name":     githubRepo.FullName,
+					"fullName": githubRepo.FullName,
+					"repoId":   didgen.NewDomainIdGenerator(&models.GithubRepo{}).Generate(connection.ID, githubRepo.GithubId),
+					"proxy":    connection.Proxy,
 				},
 			})
 
@@ -147,24 +142,17 @@ func makeDataSourcePipelinePlanV200(
 	return plan, nil
 }
 
-func makeScopesV200(bpScopes []*plugin.BlueprintScopeV200, connection *models.GithubConnection) ([]plugin.Scope, errors.Error) {
+func makeScopesV200(
+	scopeDetails []*srvhelper.ScopeDetail[models.GithubRepo, models.GithubScopeConfig],
+	connection *models.GithubConnection,
+) ([]plugin.Scope, errors.Error) {
 	scopes := make([]plugin.Scope, 0)
-	for _, bpScope := range bpScopes {
-		githubRepo := &models.GithubRepo{}
-		// get repo from db
-		err := basicRes.GetDal().First(githubRepo, dal.Where(`connection_id = ? AND github_id = ?`, connection.ID, bpScope.Id))
-		if err != nil {
-			return nil, errors.Default.Wrap(err, fmt.Sprintf("fail to find repo%s", bpScope.Id))
+	for _, scopeDetail := range scopeDetails {
+		githubRepo, scopeConfig := scopeDetail.Scope, scopeDetail.ScopeConfig
+		// if no entities specified, use all entities enabled by default
+		if len(scopeConfig.Entities) == 0 {
+			scopeConfig.Entities = plugin.DOMAIN_TYPES
 		}
-
-		scopeConfig := &models.GithubScopeConfig{}
-		// get scope configs from db
-		db := basicRes.GetDal()
-		err = db.First(scopeConfig, dal.Where(`id = ?`, githubRepo.ScopeConfigId))
-		if err != nil && !db.IsErrorNotFound(err) {
-			return nil, err
-		}
-
 		if utils.StringsContains(scopeConfig.Entities, plugin.DOMAIN_TYPE_CODE_REVIEW) ||
 			utils.StringsContains(scopeConfig.Entities, plugin.DOMAIN_TYPE_CODE) ||
 			utils.StringsContains(scopeConfig.Entities, plugin.DOMAIN_TYPE_CROSS) {
@@ -204,7 +192,13 @@ func makeScopesV200(bpScopes []*plugin.BlueprintScopeV200, connection *models.Gi
 	return scopes, nil
 }
 
-func addGithub(subtaskMetas []plugin.SubTaskMeta, connection *models.GithubConnection, entities []string, stage plugin.PipelineStage, options map[string]interface{}) (plugin.PipelineStage, errors.Error) {
+func addGithub(
+	subtaskMetas []plugin.SubTaskMeta,
+	connection *models.GithubConnection,
+	entities []string,
+	stage coreModels.PipelineStage,
+	options *tasks.GithubOptions,
+) (coreModels.PipelineStage, errors.Error) {
 	// construct github(graphql) task
 	if connection.EnableGraphql {
 		// FIXME this need fix when 2 plugins merged
@@ -213,35 +207,27 @@ func addGithub(subtaskMetas []plugin.SubTaskMeta, connection *models.GithubConne
 			return nil, err
 		}
 		if pluginGq, ok := p.(plugin.PluginTask); ok {
-			subtasks, err := helper.MakePipelinePlanSubtasks(pluginGq.SubTaskMetas(), entities)
+			task, err := helper.MakePipelinePlanTask("github_graphql", pluginGq.SubTaskMetas(), entities, options)
 			if err != nil {
 				return nil, err
 			}
-			stage = append(stage, &plugin.PipelineTask{
-				Plugin:   "github_graphql",
-				Subtasks: subtasks,
-				Options:  options,
-			})
+			stage = append(stage, task)
 		} else {
 			return nil, errors.BadInput.New("plugin github_graphql does not support SubTaskMetas")
 		}
 	} else {
-		subtasks, err := helper.MakePipelinePlanSubtasks(subtaskMetas, entities)
+		task, err := helper.MakePipelinePlanTask("github", subtaskMetas, entities, options)
 		if err != nil {
 			return nil, err
 		}
-		stage = append(stage, &plugin.PipelineTask{
-			Plugin:   "github",
-			Subtasks: subtasks,
-			Options:  options,
-		})
+		stage = append(stage, task)
 	}
 	return stage, nil
 }
 
 func getApiRepo(
 	op *tasks.GithubOptions,
-	apiClient aha.ApiClientAbstract,
+	apiClient plugin.ApiClient,
 ) (*tasks.GithubApiRepo, errors.Error) {
 	repoRes := &tasks.GithubApiRepo{}
 	res, err := apiClient.Get(fmt.Sprintf("repos/%s", op.Name), nil, nil)
@@ -265,7 +251,7 @@ func getApiRepo(
 
 func MemorizedGetApiRepo(
 	repo *tasks.GithubApiRepo,
-	op *tasks.GithubOptions, apiClient aha.ApiClientAbstract,
+	op *tasks.GithubOptions, apiClient plugin.ApiClient,
 ) (*tasks.GithubApiRepo, errors.Error) {
 	if repo == nil {
 		var err errors.Error

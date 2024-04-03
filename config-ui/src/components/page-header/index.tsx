@@ -17,7 +17,7 @@
  */
 
 import { Link } from 'react-router-dom';
-import { Icon } from '@blueprintjs/core';
+import { RightOutlined } from '@ant-design/icons';
 
 import * as S from './styled';
 
@@ -27,29 +27,27 @@ interface Props {
     path: string;
   }>;
   extra?: React.ReactNode;
+  description?: string;
   children: React.ReactNode;
 }
 
-export const PageHeader = ({ breadcrumbs, extra, children }: Props) => {
+export const PageHeader = ({ breadcrumbs, extra, description, children }: Props) => {
   return (
     <S.Container>
       <S.Title>
         <S.Breadcrumbs>
-          {breadcrumbs.map(({ name, path }, i) => (
+          {breadcrumbs.map(({ name, path }, i, arr) => (
             <S.Breadcrumb key={i}>
-              {breadcrumbs.length !== i + 1 ? (
-                <Link to={path}>
-                  {name}
-                  <Icon icon="chevron-right" />
-                </Link>
-              ) : (
+              <Link to={path}>
                 <span>{name}</span>
-              )}
+                {arr.length - 1 !== i && <RightOutlined />}
+              </Link>
             </S.Breadcrumb>
           ))}
         </S.Breadcrumbs>
         <S.Extra>{extra}</S.Extra>
       </S.Title>
+      <S.Description>{description}</S.Description>
       <S.Content>{children}</S.Content>
     </S.Container>
   );

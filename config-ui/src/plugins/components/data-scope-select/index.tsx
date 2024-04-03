@@ -17,17 +17,16 @@
  */
 
 import { useState, useEffect, useMemo } from 'react';
-import { Button, Intent } from '@blueprintjs/core';
+import { RedoOutlined, PlusOutlined } from '@ant-design/icons';
+import { Flex, Select, Button } from 'antd';
 import { useDebounce } from 'ahooks';
-import type { McsID, McsItem } from 'miller-columns-select';
+import type { McsItem } from 'miller-columns-select';
 import MillerColumnsSelect from 'miller-columns-select';
 
-import { FormItem, ExternalLink, Message, Buttons, MultiSelector } from '@/components';
+import API from '@/api';
+import { Loading, Block, ExternalLink, Message } from '@/components';
 import { useRefreshData } from '@/hooks';
 import { getPluginScopeId } from '@/plugins';
-
-import * as API from './api';
-import * as S from './styled';
 
 interface Props {
   plugin: string;
@@ -46,37 +45,37 @@ export const DataScopeSelect = ({
   onSubmit,
   onCancel,
 }: Props) => {
+  const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState('');
   const [items, setItems] = useState<McsItem<{ data: any }>[]>([]);
-  const [selectedItems, setSelecteItems] = useState<any>([]);
+  const [selectedIds, setSelectedIds] = useState<ID[]>([]);
+  // const [selectedItems, setSelecteItems] = useState<any>([]);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
   const [total, setTotal] = useState(0);
 
   useEffect(() => {
-    setSelecteItems(initialScope ?? []);
+    setSelectedIds((initialScope ?? []).map((sc) => sc.id));
   }, []);
 
-  const selectedIds = useMemo(() => selectedItems.map((it: any) => getPluginScopeId(plugin, it)), [selectedItems]);
-
-  const handleChangeSelectItemsIds = (ids: McsID[]) => {
-    setSelecteItems(items.filter((it) => ids.includes(it.id)).map((it) => it.data));
-  };
-
   const getDataScope = async (page: number) => {
-    const res = await API.getDataScope(plugin, connectionId, { page, pageSize });
-    setItems([
+    if (page === 1) {
+      setLoading(true);
+    }
+
+    const res = await API.scope.list(plugin, connectionId, { page, pageSize });
+    setItems((items) => [
       ...items,
       ...res.scopes.map((sc) => ({
         parentId: null,
-        id: getPluginScopeId(plugin, sc),
-        title: sc.name,
-        data: sc,
+        id: getPluginScopeId(plugin, sc.scope),
+        title: sc.scope.fullName ?? sc.scope.name,
+        data: sc.scope,
       })),
     ]);
-    if (page === 1) {
-      setTotal(res.count);
-    }
+
+    setTotal(res.count);
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -86,18 +85,33 @@ export const DataScopeSelect = ({
   const search = useDebounce(query, { wait: 500 });
 
   const { ready, data } = useRefreshData(
-    () => API.getDataScope(plugin, connectionId, { searchTerm: search }),
+    async () => await API.scope.list(plugin, connectionId, { searchTerm: search }),
     [search],
+  );
+
+  const searchOptions = useMemo(
+    () =>
+      data?.scopes.map((sc) => ({
+        label: sc.scope.fullName ?? sc.scope.name,
+        value: getPluginScopeId(plugin, sc.scope),
+      })) ?? [],
+    [data],
   );
 
   const handleScroll = () => setPage(page + 1);
 
-  const handleSubmit = () => onSubmit?.(selectedItems);
+  const handleSubmit = () => onSubmit?.(selectedIds);
+
+  const handleRefresh = () => {
+    setQuery('');
+    setItems([]);
+    getDataScope(1);
+  };
 
   return (
-    <FormItem
-      label="Select Data Scope"
-      subLabel={
+    <Block
+      title="Select Data Scope"
+      description={
         items.length ? (
           <>
             Select the data scope in this Connection that you wish to associate with this Project. If you wish to add
@@ -116,8 +130,10 @@ export const DataScopeSelect = ({
       }
       required
     >
-      {items.length ? (
-        <S.Wrapper>
+      {loading ? (
+        <Loading />
+      ) : items.length ? (
+        <Flex vertical gap="middle">
           {showWarning ? (
             <Message
               style={{ marginBottom: 24 }}
@@ -131,22 +147,22 @@ export const DataScopeSelect = ({
               }
             />
           ) : (
-            <Buttons>
-              <Button intent={Intent.PRIMARY} icon="refresh" text="Refresh Data Scope" />
-            </Buttons>
+            <Flex>
+              <Button type="primary" icon={<RedoOutlined />} onClick={handleRefresh}>
+                Refresh Data Scope
+              </Button>
+            </Flex>
           )}
-          <div className="search">
-            <MultiSelector
-              loading={!ready}
-              items={data?.scopes ?? []}
-              getName={(it: any) => it.name}
-              getKey={(it) => getPluginScopeId(plugin, it)}
-              noResult="No Data Scopes Available."
-              onQueryChange={(query) => setQuery(query)}
-              selectedItems={selectedItems}
-              onChangeItems={setSelecteItems}
-            />
-          </div>
+          <Select
+            filterOption={false}
+            loading={!ready}
+            showSearch
+            mode="multiple"
+            options={searchOptions}
+            value={selectedIds}
+            onChange={(value) => setSelectedIds(value)}
+            onSearch={(value) => setQuery(value)}
+          />
           <MillerColumnsSelect
             showSelectAll
             columnCount={1}
@@ -155,20 +171,24 @@ export const DataScopeSelect = ({
             getHasMore={() => items.length < total}
             onScroll={handleScroll}
             selectedIds={selectedIds}
-            onSelectItemIds={handleChangeSelectItemsIds}
+            onSelectItemIds={setSelectedIds}
           />
-          <Buttons position="bottom" align="right">
-            <Button outlined intent={Intent.PRIMARY} text="Cancel" onClick={onCancel} />
-            <Button disabled={!selectedItems.length} intent={Intent.PRIMARY} text="Save" onClick={handleSubmit} />
-          </Buttons>
-        </S.Wrapper>
+          <Flex justify="flex-end" gap="small">
+            <Button onClick={onCancel}>Cancel</Button>
+            <Button type="primary" disabled={!selectedIds.length} onClick={handleSubmit}>
+              Save
+            </Button>
+          </Flex>
+        </Flex>
       ) : (
-        <S.Wrapper>
+        <Flex>
           <ExternalLink link={`/connections/${plugin}/${connectionId}`}>
-            <Button intent={Intent.PRIMARY} icon="add" text="Add Data Scope" />
+            <Button type="primary" icon={<PlusOutlined />}>
+              Add Data Scope
+            </Button>
           </ExternalLink>
-        </S.Wrapper>
+        </Flex>
       )}
-    </FormItem>
+    </Block>
   );
 };

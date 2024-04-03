@@ -18,8 +18,8 @@
 
 import PluginIcon from '@/images/plugin-icon.svg';
 
-import { PluginConfig } from './config';
-import { PluginConfigType, PluginType } from './types';
+import { pluginConfigs } from './register';
+import { IPluginConfig } from '@/types';
 
 export const getPluginScopeId = (plugin: string, scope: any) => {
   switch (plugin) {
@@ -30,8 +30,10 @@ export const getPluginScopeId = (plugin: string, scope: any) => {
     case 'gitlab':
       return `${scope.gitlabId}`;
     case 'jenkins':
-      return `${scope.jobFullName}`;
+      return `${scope.fullName}`;
     case 'bitbucket':
+      return `${scope.bitbucketId}`;
+    case 'bitbucket_server':
       return `${scope.bitbucketId}`;
     case 'sonarqube':
       return `${scope.projectKey}`;
@@ -42,11 +44,12 @@ export const getPluginScopeId = (plugin: string, scope: any) => {
   }
 };
 
-export const getPluginConfig = (name: string): PluginConfigType => {
-  let pluginConfig = PluginConfig.find((plugin) => plugin.plugin === name) as PluginConfigType;
+export const getRegisterPlugins = () => pluginConfigs.map((it) => it.plugin);
+
+export const getPluginConfig = (name: string): IPluginConfig => {
+  let pluginConfig = pluginConfigs.find((it) => it.plugin === name);
   if (!pluginConfig) {
     pluginConfig = {
-      type: PluginType.Pipeline,
       plugin: name,
       name: name,
       icon: PluginIcon,
@@ -57,10 +60,7 @@ export const getPluginConfig = (name: string): PluginConfigType => {
         fields: [],
       },
       dataScope: {
-        millerColumns: {
-          title: '',
-          subTitle: '',
-        },
+        title: '',
       },
     };
   }

@@ -34,23 +34,14 @@ type TrelloTestConnResponse struct {
 	Connection *models.TrelloConn
 }
 
-// @Summary test trello connection
-// @Description Test trello Connection
-// @Tags plugins/trello
-// @Param body body models.TrelloConn true "json body"
-// @Success 200  {object} TrelloTestConnResponse "Success"
-// @Failure 400  {string} errcode.Error "Bad Request"
-// @Failure 500  {string} errcode.Error "Internal Error"
-// @Router /plugins/trello/test [POST]
-func TestConnection(input *plugin.ApiResourceInput) (*plugin.ApiResourceOutput, errors.Error) {
+func testConnection(ctx context.Context, connection models.TrelloConn) (*TrelloTestConnResponse, errors.Error) {
 	// process input
-	var connection models.TrelloConn
-	err := helper.Decode(input.Body, &connection, vld)
-	if err != nil {
-		return nil, err
+	if vld != nil {
+		if err := vld.Struct(connection); err != nil {
+			return nil, errors.Default.Wrap(err, "error validating target")
+		}
 	}
-
-	apiClient, err := helper.NewApiClientFromConnection(context.TODO(), basicRes, &connection)
+	apiClient, err := helper.NewApiClientFromConnection(ctx, basicRes, &connection)
 	if err != nil {
 		return nil, err
 	}
@@ -66,12 +57,62 @@ func TestConnection(input *plugin.ApiResourceInput) (*plugin.ApiResourceOutput, 
 	if res.StatusCode != http.StatusOK {
 		return nil, errors.HttpStatus(res.StatusCode).New("unexpected status code while testing connection")
 	}
+	connection = connection.Sanitize()
 	body := TrelloTestConnResponse{}
 	body.Success = true
 	body.Message = "success"
 	body.Connection = &connection
 	// output
-	return &plugin.ApiResourceOutput{Body: body, Status: 200}, nil
+	return &body, nil
+}
+
+// TestConnection test trello connection
+// @Summary test trello connection
+// @Description Test trello Connection
+// @Tags plugins/trello
+// @Param body body models.TrelloConn true "json body"
+// @Success 200  {object} TrelloTestConnResponse "Success"
+// @Failure 400  {string} errcode.Error "Bad Request"
+// @Failure 500  {string} errcode.Error "Internal Error"
+// @Router /plugins/trello/test [POST]
+func TestConnection(input *plugin.ApiResourceInput) (*plugin.ApiResourceOutput, errors.Error) {
+	// process input
+	var connection models.TrelloConn
+	err := helper.Decode(input.Body, &connection, vld)
+	if err != nil {
+		return nil, err
+	}
+	// test connection
+	result, err := testConnection(context.TODO(), connection)
+	if err != nil {
+		return nil, plugin.WrapTestConnectionErrResp(basicRes, err)
+	}
+	return &plugin.ApiResourceOutput{Body: result, Status: http.StatusOK}, nil
+}
+
+// TestExistingConnection test trello connection options
+// @Summary test trello connection
+// @Description Test trello Connection
+// @Tags plugins/trello
+// @Param connectionId path int true "connection ID"
+// @Success 200  {object} TrelloTestConnResponse "Success"
+// @Failure 400  {string} errcode.Error "Bad Request"
+// @Failure 500  {string} errcode.Error "Internal Error"
+// @Router /plugins/trello/connections/{connectionId}/test [POST]
+func TestExistingConnection(input *plugin.ApiResourceInput) (*plugin.ApiResourceOutput, errors.Error) {
+	connection := &models.TrelloConnection{}
+	err := connectionHelper.First(connection, input.Params)
+	if err != nil {
+		return nil, errors.BadInput.Wrap(err, "find connection from db")
+	}
+	if err := helper.DecodeMapStruct(input.Body, connection, false); err != nil {
+		return nil, err
+	}
+	testConnectionResult, testConnectionErr := testConnection(context.TODO(), connection.TrelloConn)
+	if testConnectionErr != nil {
+		return nil, plugin.WrapTestConnectionErrResp(basicRes, testConnectionErr)
+	}
+	return &plugin.ApiResourceOutput{Body: testConnectionResult, Status: http.StatusOK}, nil
 }
 
 // @Summary create trello connection
@@ -89,7 +130,7 @@ func PostConnections(input *plugin.ApiResourceInput) (*plugin.ApiResourceOutput,
 	if err != nil {
 		return nil, err
 	}
-	return &plugin.ApiResourceOutput{Body: connection, Status: http.StatusOK}, nil
+	return &plugin.ApiResourceOutput{Body: connection.Sanitize(), Status: http.StatusOK}, nil
 }
 
 // @Summary patch trello connection
@@ -102,11 +143,16 @@ func PostConnections(input *plugin.ApiResourceInput) (*plugin.ApiResourceOutput,
 // @Router /plugins/trello/connections/{connectionId} [PATCH]
 func PatchConnection(input *plugin.ApiResourceInput) (*plugin.ApiResourceOutput, errors.Error) {
 	connection := &models.TrelloConnection{}
-	err := connectionHelper.Patch(connection, input)
-	if err != nil {
+	if err := connectionHelper.First(&connection, input.Params); err != nil {
 		return nil, err
 	}
-	return &plugin.ApiResourceOutput{Body: connection}, nil
+	if err := (&models.TrelloConnection{}).MergeFromRequest(connection, input.Body); err != nil {
+		return nil, errors.Convert(err)
+	}
+	if err := connectionHelper.SaveWithCreateOrUpdate(connection); err != nil {
+		return nil, err
+	}
+	return &plugin.ApiResourceOutput{Body: connection.Sanitize()}, nil
 }
 
 // @Summary delete a trello connection
@@ -118,7 +164,14 @@ func PatchConnection(input *plugin.ApiResourceInput) (*plugin.ApiResourceOutput,
 // @Failure 500  {string} errcode.Error "Internal Error"
 // @Router /plugins/trello/connections/{connectionId} [DELETE]
 func DeleteConnection(input *plugin.ApiResourceInput) (*plugin.ApiResourceOutput, errors.Error) {
-	return connectionHelper.Delete(&models.TrelloConnection{}, input)
+	conn := &models.TrelloConnection{}
+	output, err := connectionHelper.Delete(conn, input)
+	if err != nil {
+		return output, err
+	}
+	output.Body = conn.Sanitize()
+	return output, nil
+
 }
 
 // @Summary get all trello connections
@@ -134,6 +187,9 @@ func ListConnections(input *plugin.ApiResourceInput) (*plugin.ApiResourceOutput,
 	if err != nil {
 		return nil, err
 	}
+	for idx, c := range connections {
+		connections[idx] = c.Sanitize()
+	}
 	return &plugin.ApiResourceOutput{Body: connections, Status: http.StatusOK}, nil
 }
 
@@ -147,5 +203,5 @@ func ListConnections(input *plugin.ApiResourceInput) (*plugin.ApiResourceOutput,
 func GetConnection(input *plugin.ApiResourceInput) (*plugin.ApiResourceOutput, errors.Error) {
 	connection := &models.TrelloConnection{}
 	err := connectionHelper.First(connection, input.Params)
-	return &plugin.ApiResourceOutput{Body: connection}, err
+	return &plugin.ApiResourceOutput{Body: connection.Sanitize()}, err
 }

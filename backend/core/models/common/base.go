@@ -18,8 +18,9 @@ limitations under the License.
 package common
 
 import (
-	"regexp"
 	"time"
+
+	"github.com/apache/incubator-devlake/core/dal"
 )
 
 const (
@@ -47,26 +48,15 @@ type Updater struct {
 	UpdaterEmail string `json:"updaterEmail"`
 }
 
-type ScopeConfig struct {
-	Model
-	Entities []string `gorm:"type:json;serializer:json" json:"entities" mapstructure:"entities"`
-}
-
-type NoPKModel struct {
-	CreatedAt     time.Time `json:"createdAt"`
-	UpdatedAt     time.Time `json:"updatedAt"`
-	RawDataOrigin `swaggerignore:"true"`
-}
-
 // embedded fields for tool layer tables
 type RawDataOrigin struct {
 	// can be used for flushing outdated records from table
-	RawDataParams string `gorm:"column:_raw_data_params;type:varchar(255);index" json:"_raw_data_params"`
-	RawDataTable  string `gorm:"column:_raw_data_table;type:varchar(255)" json:"_raw_data_table"`
+	RawDataParams string `gorm:"column:_raw_data_params;type:varchar(255);index" json:"_raw_data_params" mapstructure:"rawDataParams"`
+	RawDataTable  string `gorm:"column:_raw_data_table;type:varchar(255)" json:"_raw_data_table" mapstructure:"rawDataTable"`
 	// can be used for debugging
-	RawDataId uint64 `gorm:"column:_raw_data_id" json:"_raw_data_id"`
+	RawDataId uint64 `gorm:"column:_raw_data_id" json:"_raw_data_id" mapstructure:"rawDataId"`
 	// we can store record index into this field, which is helpful for debugging
-	RawDataRemark string `gorm:"column:_raw_data_remark" json:"_raw_data_remark"`
+	RawDataRemark string `gorm:"column:_raw_data_remark" json:"_raw_data_remark" mapstructure:"rawDataRemark"`
 }
 
 type GetRawDataOrigin interface {
@@ -77,6 +67,12 @@ func (c *RawDataOrigin) GetRawDataOrigin() *RawDataOrigin {
 	return c
 }
 
+type NoPKModel struct {
+	CreatedAt     time.Time `json:"createdAt" mapstructure:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt" mapstructure:"updatedAt"`
+	RawDataOrigin `swaggerignore:"true" mapstructure:",squash"`
+}
+
 func NewNoPKModel() NoPKModel {
 	now := time.Now()
 	return NoPKModel{
@@ -85,10 +81,36 @@ func NewNoPKModel() NoPKModel {
 	}
 }
 
-var (
-	DUPLICATE_REGEX = regexp.MustCompile(`(?i)\bduplicate\b`)
-)
+type Scope struct {
+	NoPKModel     `mapstructure:",squash"`
+	ConnectionId  uint64 `json:"connectionId" gorm:"primaryKey" validate:"required" mapstructure:"connectionId,omitempty"`
+	ScopeConfigId uint64 `json:"scopeConfigId,omitempty" mapstructure:"scopeConfigId,omitempty"`
+}
 
-func IsDuplicateError(err error) bool {
-	return err != nil && DUPLICATE_REGEX.MatchString(err.Error())
+// ScopeConnectionId implements plugin.ToolLayerScope.
+func (s Scope) ScopeConnectionId() uint64 {
+	return s.ConnectionId
+}
+
+func (s Scope) ScopeScopeConfigId() uint64 {
+	return s.ScopeConfigId
+}
+
+type ScopeConfig struct {
+	Model
+	Entities     []string `gorm:"type:json;serializer:json" json:"entities" mapstructure:"entities"`
+	ConnectionId uint64   `json:"connectionId" gorm:"index" validate:"required" mapstructure:"connectionId,omitempty"`
+	Name         string   `mapstructure:"name" json:"name" gorm:"type:varchar(255);uniqueIndex" validate:"required"`
+}
+
+func (s ScopeConfig) ScopeConfigConnectionId() uint64 {
+	return s.ConnectionId
+}
+func (s ScopeConfig) ScopeConfigId() uint64 {
+	return s.ID
+}
+
+type ScopeConfigOperator[T dal.Tabler] interface {
+	*T
+	SetConnectionId(t *T, connectionId uint64)
 }

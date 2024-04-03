@@ -28,7 +28,7 @@ const RAW_PIPELINE_STEPS_TABLE = "bitbucket_api_pipeline_steps"
 var _ plugin.SubTaskEntryPoint = CollectPipelineSteps
 
 var CollectPipelineStepsMeta = plugin.SubTaskMeta{
-	Name:             "CollectPipelineSteps",
+	Name:             "Collect Pipeline Steps",
 	EntryPoint:       CollectPipelineSteps,
 	EnabledByDefault: true,
 	Description:      "Collect PipelineSteps data from Bitbucket api",
@@ -38,7 +38,7 @@ var CollectPipelineStepsMeta = plugin.SubTaskMeta{
 func CollectPipelineSteps(taskCtx plugin.SubTaskContext) errors.Error {
 	rawDataSubTaskArgs, data := CreateRawDataSubTaskArgs(taskCtx, RAW_PIPELINE_STEPS_TABLE)
 
-	collectorWithState, err := helper.NewStatefulApiCollector(*rawDataSubTaskArgs, data.TimeAfter)
+	collectorWithState, err := helper.NewStatefulApiCollector(*rawDataSubTaskArgs)
 	if err != nil {
 		return err
 	}
@@ -52,7 +52,6 @@ func CollectPipelineSteps(taskCtx plugin.SubTaskContext) errors.Error {
 	err = collectorWithState.InitCollector(helper.ApiCollectorArgs{
 		ApiClient:   data.ApiClient,
 		PageSize:    100,
-		Incremental: collectorWithState.IsIncremental(),
 		Input:       iterator,
 		UrlTemplate: "repositories/{{ .Params.FullName }}/pipelines/{{ .Input.BitbucketId }}/steps/",
 		Query: GetQueryFields(

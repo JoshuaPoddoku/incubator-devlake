@@ -27,14 +27,13 @@ import (
 var _ plugin.ToolLayerScope = (*JiraBoard)(nil)
 
 type JiraBoard struct {
-	common.NoPKModel `json:"-" mapstructure:"-"`
-	ConnectionId     uint64 `json:"connectionId" mapstructure:"connectionId" validate:"required" gorm:"primaryKey"`
-	BoardId          uint64 `json:"boardId" mapstructure:"boardId" validate:"required" gorm:"primaryKey"`
-	ScopeConfigId    uint64 `json:"scopeConfigId,omitempty" mapstructure:"scopeConfigId"`
-	ProjectId        uint   `json:"projectId" mapstructure:"projectId"`
-	Name             string `json:"name" mapstructure:"name" gorm:"type:varchar(255)"`
-	Self             string `json:"self" mapstructure:"self" gorm:"type:varchar(255)"`
-	Type             string `json:"type" mapstructure:"type" gorm:"type:varchar(100)"`
+	common.Scope `mapstructure:",squash"`
+	BoardId      uint64 `json:"boardId" mapstructure:"boardId" validate:"required" gorm:"primaryKey"`
+	ProjectId    uint   `json:"projectId" mapstructure:"projectId"`
+	Name         string `json:"name" mapstructure:"name" gorm:"type:varchar(255)"`
+	Self         string `json:"self" mapstructure:"self" gorm:"type:varchar(255)"`
+	Type         string `json:"type" mapstructure:"type" gorm:"type:varchar(100)"`
+	Jql          string `json:"jql" mapstructure:"jql"`
 }
 
 func (b JiraBoard) ScopeId() string {

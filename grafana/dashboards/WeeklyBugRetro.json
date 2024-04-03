@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 3,
+  "id": 11,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -34,6 +34,7 @@
         "y": 0
       },
       "id": 28,
+      "links": [],
       "options": {
         "code": {
           "language": "plaintext",
@@ -43,7 +44,7 @@
         "content": "- Use Cases: This dashboard can be used to track bugs with metrics such as [Bug Age](https://devlake.apache.org/docs/Metrics/BugAge).\n- Data Source Required: GitHub ([transformation](https://devlake.apache.org/docs/UserManuals/ConfigUI/GitHub#step-3---adding-transformation-rules-optional) required) or Jira ([transformation](https://devlake.apache.org/docs/UserManuals/ConfigUI/Jira#step-3---adding-transformation-rules-optional) required). Transformation is the configuration for you to tell DevLake what is a bug.",
         "mode": "markdown"
       },
-      "pluginVersion": "9.5.1",
+      "pluginVersion": "9.5.15",
       "targets": [
         {
           "datasource": {
@@ -58,10 +59,7 @@
       "type": "text"
     },
     {
-      "datasource": {
-        "type": "mysql",
-        "uid": "P430005175C4C7810"
-      },
+      "datasource": "mysql",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -91,6 +89,13 @@
         "y": 3
       },
       "id": 6,
+      "links": [
+        {
+          "targetBlank": true,
+          "title": "Bug Count per 1k Lines of Code",
+          "url": "https://devlake.apache.org/docs/Metrics/BugCountPer1kLinesOfCode"
+        }
+      ],
       "options": {
         "colorMode": "value",
         "graphMode": "area",
@@ -106,19 +111,17 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "9.5.1",
+      "pluginVersion": "9.5.15",
       "targets": [
         {
-          "datasource": {
-            "type": "mysql",
-            "uid": "P430005175C4C7810"
-          },
+          "datasource": "mysql",
+          "editorMode": "code",
           "format": "table",
           "group": [],
           "metricColumn": "none",
           "queryType": "randomWalk",
           "rawQuery": true,
-          "rawSql": "select\n  count(*)\nfrom\n  lake.issues as i\n  join lake.board_issues bi on i.id = bi.issue_id\n  join boards b on bi.board_id = b.id\nwhere\n  i.type in ($issue_type)\n  and date(i.created_date) BETWEEN curdate() - INTERVAL WEEKDAY(curdate())+7 DAY AND curdate() - INTERVAL WEEKDAY(curdate())+1 DAY\n  and b.id in ($board_id)",
+          "rawSql": "select\n  count(distinct i.id)\nfrom\n  issues as i\n  join board_issues bi on i.id = bi.issue_id\n  join boards b on bi.board_id = b.id\nwhere\n  i.type in (${issue_type})\n  and date(i.created_date) BETWEEN curdate() - INTERVAL WEEKDAY(curdate())+7 DAY AND curdate() - INTERVAL WEEKDAY(curdate()) DAY\n  and b.id in (${board_id})",
           "refId": "A",
           "select": [
             [
@@ -130,6 +133,23 @@
               }
             ]
           ],
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          },
           "table": "_devlake_migration_history",
           "timeColumn": "created_at",
           "timeColumnType": "timestamp",
@@ -146,10 +166,7 @@
       "type": "stat"
     },
     {
-      "datasource": {
-        "type": "mysql",
-        "uid": "P430005175C4C7810"
-      },
+      "datasource": "mysql",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -173,6 +190,13 @@
         "y": 3
       },
       "id": 26,
+      "links": [
+        {
+          "targetBlank": true,
+          "title": "Bug Count per 1k Lines of Code",
+          "url": "https://devlake.apache.org/docs/Metrics/BugCountPer1kLinesOfCode"
+        }
+      ],
       "options": {
         "displayLabels": [
           "name",
@@ -201,16 +225,14 @@
       "pluginVersion": "8.0.6",
       "targets": [
         {
-          "datasource": {
-            "type": "mysql",
-            "uid": "P430005175C4C7810"
-          },
+          "datasource": "mysql",
+          "editorMode": "code",
           "format": "table",
           "group": [],
           "metricColumn": "none",
           "queryType": "randomWalk",
           "rawQuery": true,
-          "rawSql": "select\n  priority,\n  count(*) as 'Issue Number'\nfrom\n  lake.issues as i\n  join lake.board_issues bi on i.id = bi.issue_id\n  join boards b on bi.board_id = b.id\nwhere\n  i.type in ($issue_type)\n  and date(i.created_date) BETWEEN curdate() - INTERVAL WEEKDAY(curdate())+7 DAY AND curdate() - INTERVAL WEEKDAY(curdate())+1 DAY\n  and b.id in ($board_id)\ngroup by 1",
+          "rawSql": "select\n  priority,\n  count(distinct i.id) as 'Issue Number'\nfrom\n  issues as i\n  join board_issues bi on i.id = bi.issue_id\n  join boards b on bi.board_id = b.id\nwhere\n  i.type in (${issue_type})\n  and date(i.created_date) BETWEEN curdate() - INTERVAL WEEKDAY(curdate())+7 DAY AND curdate() - INTERVAL WEEKDAY(curdate()) DAY\n  and b.id in (${board_id})\ngroup by 1",
           "refId": "A",
           "select": [
             [
@@ -222,6 +244,23 @@
               }
             ]
           ],
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          },
           "table": "_devlake_migration_history",
           "timeColumn": "created_at",
           "timeColumnType": "timestamp",
@@ -238,10 +277,7 @@
       "type": "piechart"
     },
     {
-      "datasource": {
-        "type": "mysql",
-        "uid": "P430005175C4C7810"
-      },
+      "datasource": "mysql",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -356,6 +392,13 @@
         "y": 3
       },
       "id": 4,
+      "links": [
+        {
+          "targetBlank": true,
+          "title": "Bug Count per 1k Lines of Code",
+          "url": "https://devlake.apache.org/docs/Metrics/BugCountPer1kLinesOfCode"
+        }
+      ],
       "options": {
         "cellHeight": "sm",
         "footer": {
@@ -369,19 +412,16 @@
         "showHeader": true,
         "sortBy": []
       },
-      "pluginVersion": "9.5.1",
+      "pluginVersion": "9.5.15",
       "targets": [
         {
-          "datasource": {
-            "type": "mysql",
-            "uid": "P430005175C4C7810"
-          },
+          "datasource": "mysql",
           "format": "table",
           "group": [],
           "metricColumn": "none",
           "queryType": "randomWalk",
           "rawQuery": true,
-          "rawSql": "select\n  i.issue_key as 'Issue Number',\n  i.title as 'Title',\n  i.url as 'Url'\nfrom\n  lake.issues as i\n\tjoin lake.board_issues bi on i.id = bi.issue_id\n\tjoin lake.boards b on bi.board_id = b.id\nwhere\n  i.type in ($issue_type)\n  and date(i.created_date) BETWEEN curdate() - INTERVAL WEEKDAY(curdate())+7 DAY AND curdate() - INTERVAL WEEKDAY(curdate())+1 DAY\n  and b.id in ($board_id)",
+          "rawSql": "select\n  i.issue_key as 'Issue Number',\n  i.title as 'Title',\n  i.url as 'Url'\nfrom\n  issues as i\n\tjoin board_issues bi on i.id = bi.issue_id\n\tjoin boards b on bi.board_id = b.id\nwhere\n  i.type in (${issue_type})\n  and date(i.created_date) BETWEEN curdate() - INTERVAL WEEKDAY(curdate())+7 DAY AND curdate() - INTERVAL WEEKDAY(curdate()) DAY\n  and b.id in (${board_id})",
           "refId": "A",
           "select": [
             [
@@ -409,10 +449,7 @@
       "type": "table"
     },
     {
-      "datasource": {
-        "type": "mysql",
-        "uid": "P430005175C4C7810"
-      },
+      "datasource": "mysql",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -442,6 +479,13 @@
         "y": 11
       },
       "id": 8,
+      "links": [
+        {
+          "targetBlank": true,
+          "title": "Bug Count per 1k Lines of Code",
+          "url": "https://devlake.apache.org/docs/Metrics/BugCountPer1kLinesOfCode"
+        }
+      ],
       "options": {
         "colorMode": "value",
         "graphMode": "area",
@@ -457,19 +501,17 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "9.5.1",
+      "pluginVersion": "9.5.15",
       "targets": [
         {
-          "datasource": {
-            "type": "mysql",
-            "uid": "P430005175C4C7810"
-          },
+          "datasource": "mysql",
+          "editorMode": "code",
           "format": "table",
           "group": [],
           "metricColumn": "none",
           "queryType": "randomWalk",
           "rawQuery": true,
-          "rawSql": "select\n  count(*)\nfrom\n  lake.issues as i\n  join board_issues bi on i.id = bi.issue_id\n\tjoin boards b on bi.board_id = b.id\nwhere\n  i.type in ($issue_type)\n  and status = 'DONE'\n  and date(i.resolution_date) BETWEEN curdate() - INTERVAL WEEKDAY(curdate())+7 DAY AND curdate() - INTERVAL WEEKDAY(curdate())+1 DAY\n  and b.id in ($board_id)",
+          "rawSql": "select\n  count(distinct i.id)\nfrom\n  issues as i\n  join board_issues bi on i.id = bi.issue_id\n\tjoin boards b on bi.board_id = b.id\nwhere\n  i.type in (${issue_type})\n  and status = 'DONE'\n  and date(i.resolution_date) BETWEEN curdate() - INTERVAL WEEKDAY(curdate())+7 DAY AND curdate() - INTERVAL WEEKDAY(curdate()) DAY\n  and b.id in (${board_id})",
           "refId": "A",
           "select": [
             [
@@ -481,6 +523,23 @@
               }
             ]
           ],
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          },
           "table": "_devlake_migration_history",
           "timeColumn": "created_at",
           "timeColumnType": "timestamp",
@@ -497,10 +556,7 @@
       "type": "stat"
     },
     {
-      "datasource": {
-        "type": "mysql",
-        "uid": "P430005175C4C7810"
-      },
+      "datasource": "mysql",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -535,6 +591,13 @@
         "y": 11
       },
       "id": 24,
+      "links": [
+        {
+          "targetBlank": true,
+          "title": "Bug Age",
+          "url": "https://devlake.apache.org/docs/Metrics/BugAge"
+        }
+      ],
       "options": {
         "colorMode": "value",
         "graphMode": "area",
@@ -550,19 +613,16 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "9.5.1",
+      "pluginVersion": "9.5.15",
       "targets": [
         {
-          "datasource": {
-            "type": "mysql",
-            "uid": "P430005175C4C7810"
-          },
+          "datasource": "mysql",
           "format": "table",
           "group": [],
           "metricColumn": "none",
           "queryType": "randomWalk",
           "rawQuery": true,
-          "rawSql": "select\n  avg(lead_time_minutes / 1440)\nfrom\n  lake.issues as i\n\tjoin board_issues bi on i.id = bi.issue_id\n\tjoin boards b on bi.board_id = b.id\nwhere\n  i.type in ($issue_type)\n  and status = 'DONE'\n  and date(i.resolution_date) BETWEEN curdate() - INTERVAL WEEKDAY(curdate())+7 DAY AND curdate() - INTERVAL WEEKDAY(curdate())+1 DAY\n  and b.id in ($board_id)",
+          "rawSql": "select\n  avg(lead_time_minutes / 1440)\nfrom\n  issues as i\n\tjoin board_issues bi on i.id = bi.issue_id\n\tjoin boards b on bi.board_id = b.id\nwhere\n  i.type in (${issue_type})\n  and status = 'DONE'\n  and date(i.resolution_date) BETWEEN curdate() - INTERVAL WEEKDAY(curdate())+7 DAY AND curdate() - INTERVAL WEEKDAY(curdate()) DAY\n  and b.id in (${board_id})",
           "refId": "A",
           "select": [
             [
@@ -590,10 +650,7 @@
       "type": "stat"
     },
     {
-      "datasource": {
-        "type": "mysql",
-        "uid": "P430005175C4C7810"
-      },
+      "datasource": "mysql",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -681,6 +738,13 @@
         "y": 11
       },
       "id": 10,
+      "links": [
+        {
+          "targetBlank": true,
+          "title": "Bug Count per 1k Lines of Code",
+          "url": "https://devlake.apache.org/docs/Metrics/BugCountPer1kLinesOfCode"
+        }
+      ],
       "options": {
         "cellHeight": "sm",
         "footer": {
@@ -694,19 +758,16 @@
         "showHeader": true,
         "sortBy": []
       },
-      "pluginVersion": "9.5.1",
+      "pluginVersion": "9.5.15",
       "targets": [
         {
-          "datasource": {
-            "type": "mysql",
-            "uid": "P430005175C4C7810"
-          },
+          "datasource": "mysql",
           "format": "table",
           "group": [],
           "metricColumn": "none",
           "queryType": "randomWalk",
           "rawQuery": true,
-          "rawSql": "select\n  i.issue_key as 'Issue Number',\n  i.title as 'Title',\n  lead_time_minutes/1440 as 'Lead Time in Days',\n  i.url as 'Url'\nfrom\n  lake.issues as i\n\tjoin board_issues bi on i.id = bi.issue_id\n\tjoin boards b on bi.board_id = b.id\nwhere\n  i.type in ($issue_type)\n  and status = 'DONE'\n  and date(i.resolution_date) BETWEEN curdate() - INTERVAL WEEKDAY(curdate())+7 DAY AND curdate() - INTERVAL WEEKDAY(curdate())+1 DAY\n  and b.id in ($board_id)",
+          "rawSql": "select\n  i.issue_key as 'Issue Number',\n  i.title as 'Title',\n  lead_time_minutes/1440 as 'Lead Time in Days',\n  i.url as 'Url'\nfrom\n  issues as i\n\tjoin board_issues bi on i.id = bi.issue_id\n\tjoin boards b on bi.board_id = b.id\nwhere\n  i.type in (${issue_type})\n  and status = 'DONE'\n  and date(i.resolution_date) BETWEEN curdate() - INTERVAL WEEKDAY(curdate())+7 DAY AND curdate() - INTERVAL WEEKDAY(curdate()) DAY\n  and b.id in (${board_id})",
           "refId": "A",
           "select": [
             [
@@ -734,10 +795,7 @@
       "type": "table"
     },
     {
-      "datasource": {
-        "type": "mysql",
-        "uid": "P430005175C4C7810"
-      },
+      "datasource": "mysql",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -789,6 +847,13 @@
         "y": 19
       },
       "id": 23,
+      "links": [
+        {
+          "targetBlank": true,
+          "title": "Bug Count per 1k Lines of Code",
+          "url": "https://devlake.apache.org/docs/Metrics/BugCountPer1kLinesOfCode"
+        }
+      ],
       "options": {
         "barRadius": 0,
         "barWidth": 0.3,
@@ -816,16 +881,13 @@
       "pluginVersion": "8.0.6",
       "targets": [
         {
-          "datasource": {
-            "type": "mysql",
-            "uid": "P430005175C4C7810"
-          },
+          "datasource": "mysql",
           "format": "table",
           "group": [],
           "metricColumn": "none",
           "queryType": "randomWalk",
           "rawQuery": true,
-          "rawSql": "select\n  concat('#',i.issue_key, ' ', i.title) as issue_key,\n  lead_time_minutes/1440 as lead_time\nfrom\n  lake.issues as i\n\tjoin board_issues bi on i.id = bi.issue_id\n\tjoin boards b on bi.board_id = b.id\nwhere\n  i.type in ($issue_type)\n  and status = 'DONE'\n  and date(i.resolution_date) BETWEEN curdate() - INTERVAL WEEKDAY(curdate())+7 DAY AND curdate() - INTERVAL WEEKDAY(curdate())+1 DAY\n  and b.id in ($board_id)\norder by lead_time desc",
+          "rawSql": "select\n  concat('#',i.issue_key, ' ', i.title) as issue_key,\n  lead_time_minutes/1440 as lead_time\nfrom\n  issues as i\n\tjoin board_issues bi on i.id = bi.issue_id\n\tjoin boards b on bi.board_id = b.id\nwhere\n  i.type in (${issue_type})\n  and status = 'DONE'\n  and date(i.resolution_date) BETWEEN curdate() - INTERVAL WEEKDAY(curdate())+7 DAY AND curdate() - INTERVAL WEEKDAY(curdate()) DAY\n  and b.id in (${board_id})\norder by lead_time desc",
           "refId": "A",
           "select": [
             [
@@ -853,10 +915,7 @@
       "type": "barchart"
     },
     {
-      "datasource": {
-        "type": "mysql",
-        "uid": "P430005175C4C7810"
-      },
+      "datasource": "mysql",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -867,8 +926,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -886,6 +944,13 @@
         "y": 27
       },
       "id": 16,
+      "links": [
+        {
+          "targetBlank": true,
+          "title": "Bug Count per 1k Lines of Code",
+          "url": "https://devlake.apache.org/docs/Metrics/BugCountPer1kLinesOfCode"
+        }
+      ],
       "options": {
         "colorMode": "value",
         "graphMode": "area",
@@ -901,19 +966,17 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "9.5.1",
+      "pluginVersion": "9.5.15",
       "targets": [
         {
-          "datasource": {
-            "type": "mysql",
-            "uid": "P430005175C4C7810"
-          },
+          "datasource": "mysql",
+          "editorMode": "code",
           "format": "table",
           "group": [],
           "metricColumn": "none",
           "queryType": "randomWalk",
           "rawQuery": true,
-          "rawSql": "select\n  count(*)\nfrom \n  lake.issues i\n\tjoin board_issues bi on i.id = bi.issue_id\n\tjoin boards b on bi.board_id = b.id\nwhere\n  i.type in ($issue_type)\n  and i.status != 'DONE'\n  and b.id in ($board_id)",
+          "rawSql": "select\n  count(distinct i.id)\nfrom \n  issues i\n\tjoin board_issues bi on i.id = bi.issue_id\n\tjoin boards b on bi.board_id = b.id\nwhere\n  i.type in (${issue_type})\n  and i.status != 'DONE'\n  and b.id in (${board_id})",
           "refId": "A",
           "select": [
             [
@@ -925,6 +988,23 @@
               }
             ]
           ],
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          },
           "table": "_devlake_migration_history",
           "timeColumn": "created_at",
           "timeColumnType": "timestamp",
@@ -941,10 +1021,7 @@
       "type": "stat"
     },
     {
-      "datasource": {
-        "type": "mysql",
-        "uid": "P430005175C4C7810"
-      },
+      "datasource": "mysql",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -955,8 +1032,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -974,6 +1050,13 @@
         "y": 27
       },
       "id": 25,
+      "links": [
+        {
+          "targetBlank": true,
+          "title": "Bug Count per 1k Lines of Code",
+          "url": "https://devlake.apache.org/docs/Metrics/BugCountPer1kLinesOfCode"
+        }
+      ],
       "options": {
         "colorMode": "value",
         "graphMode": "area",
@@ -989,19 +1072,16 @@
         "text": {},
         "textMode": "auto"
       },
-      "pluginVersion": "9.5.1",
+      "pluginVersion": "9.5.15",
       "targets": [
         {
-          "datasource": {
-            "type": "mysql",
-            "uid": "P430005175C4C7810"
-          },
+          "datasource": "mysql",
           "format": "table",
           "group": [],
           "metricColumn": "none",
           "queryType": "randomWalk",
           "rawQuery": true,
-          "rawSql": "select \n  avg((TIMESTAMPDIFF(MINUTE, i.created_date,NOW()))/1440)\nfrom \n  lake.issues i\n\tjoin board_issues bi on i.id = bi.issue_id\n\tjoin boards b on bi.board_id = b.id\nwhere\n  i.type in ($issue_type)\n  and i.status != 'DONE'\n  and b.id in ($board_id)",
+          "rawSql": "select \n  avg((TIMESTAMPDIFF(MINUTE, i.created_date,NOW()))/1440)\nfrom \n  issues i\n\tjoin board_issues bi on i.id = bi.issue_id\n\tjoin boards b on bi.board_id = b.id\nwhere\n  i.type in (${issue_type})\n  and i.status != 'DONE'\n  and b.id in (${board_id})",
           "refId": "A",
           "select": [
             [
@@ -1029,10 +1109,7 @@
       "type": "stat"
     },
     {
-      "datasource": {
-        "type": "mysql",
-        "uid": "P430005175C4C7810"
-      },
+      "datasource": "mysql",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1050,8 +1127,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1143,6 +1219,13 @@
         "y": 27
       },
       "id": 14,
+      "links": [
+        {
+          "targetBlank": true,
+          "title": "Bug Count per 1k Lines of Code",
+          "url": "https://devlake.apache.org/docs/Metrics/BugCountPer1kLinesOfCode"
+        }
+      ],
       "options": {
         "cellHeight": "sm",
         "footer": {
@@ -1156,19 +1239,16 @@
         "showHeader": true,
         "sortBy": []
       },
-      "pluginVersion": "9.5.1",
+      "pluginVersion": "9.5.15",
       "targets": [
         {
-          "datasource": {
-            "type": "mysql",
-            "uid": "P430005175C4C7810"
-          },
+          "datasource": "mysql",
           "format": "table",
           "group": [],
           "metricColumn": "none",
           "queryType": "randomWalk",
           "rawQuery": true,
-          "rawSql": "select \n  i.issue_key as 'Issue Number',\n  i.title as 'Title',\n  (TIMESTAMPDIFF(MINUTE, i.created_date,NOW()))/1440 as 'Queue Time in Days',\n  i.url as 'Url',\n  priority\nfrom \n  lake.issues i\n\tjoin board_issues bi on i.id = bi.issue_id\n\tjoin boards b on bi.board_id = b.id\nwhere\n  i.type in ($issue_type)\n  and i.status != 'DONE'\n  and b.id in ($board_id)\n  and priority in ($priority)\norder by 'Queue Time' desc",
+          "rawSql": "select \n  i.issue_key as 'Issue Number',\n  i.title as 'Title',\n  (TIMESTAMPDIFF(MINUTE, i.created_date,NOW()))/1440 as 'Queue Time in Days',\n  i.url as 'Url',\n  priority\nfrom \n  issues i\n\tjoin board_issues bi on i.id = bi.issue_id\n\tjoin boards b on bi.board_id = b.id\nwhere\n  i.type in (${issue_type})\n  and i.status != 'DONE'\n  and b.id in (${board_id})\n  and priority in (${priority})\norder by 'Queue Time' desc",
           "refId": "A",
           "select": [
             [
@@ -1196,10 +1276,7 @@
       "type": "table"
     },
     {
-      "datasource": {
-        "type": "mysql",
-        "uid": "P430005175C4C7810"
-      },
+      "datasource": "mysql",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1231,8 +1308,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1250,6 +1326,13 @@
         "y": 36
       },
       "id": 18,
+      "links": [
+        {
+          "targetBlank": true,
+          "title": "Bug Age",
+          "url": "https://devlake.apache.org/docs/Metrics/BugAge"
+        }
+      ],
       "options": {
         "barRadius": 0,
         "barWidth": 0.3,
@@ -1280,16 +1363,13 @@
       "pluginVersion": "8.0.6",
       "targets": [
         {
-          "datasource": {
-            "type": "mysql",
-            "uid": "P430005175C4C7810"
-          },
+          "datasource": "mysql",
           "format": "table",
           "group": [],
           "metricColumn": "none",
           "queryType": "randomWalk",
           "rawQuery": true,
-          "rawSql": "select \n  concat('#', i.issue_key) as issue_key,\n  (TIMESTAMPDIFF(MINUTE, i.created_date,NOW()))/1440 as 'Queue Time in Days'\nfrom \n  lake.issues i\n\tjoin board_issues bi on i.id = bi.issue_id\n\tjoin boards b on bi.board_id = b.id\nwhere\n  i.type in ($issue_type)\n  and i.status != 'DONE'\n  and b.id in ($board_id)\norder by 2 desc",
+          "rawSql": "select \n  concat('#', i.issue_key) as issue_key,\n  (TIMESTAMPDIFF(MINUTE, i.created_date,NOW()))/1440 as 'Queue Time in Days'\nfrom \n  issues i\n\tjoin board_issues bi on i.id = bi.issue_id\n\tjoin boards b on bi.board_id = b.id\nwhere\n  i.type in (${issue_type})\n  and i.status != 'DONE'\n  and b.id in (${board_id})\norder by 2 desc",
           "refId": "A",
           "select": [
             [
@@ -1317,10 +1397,7 @@
       "type": "barchart"
     },
     {
-      "datasource": {
-        "type": "mysql",
-        "uid": "P430005175C4C7810"
-      },
+      "datasource": "mysql",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1338,8 +1415,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1408,6 +1484,13 @@
         "y": 36
       },
       "id": 31,
+      "links": [
+        {
+          "targetBlank": true,
+          "title": "Bug Age",
+          "url": "https://devlake.apache.org/docs/Metrics/BugAge"
+        }
+      ],
       "options": {
         "cellHeight": "sm",
         "footer": {
@@ -1421,19 +1504,16 @@
         "showHeader": true,
         "sortBy": []
       },
-      "pluginVersion": "9.5.1",
+      "pluginVersion": "9.5.15",
       "targets": [
         {
-          "datasource": {
-            "type": "mysql",
-            "uid": "P430005175C4C7810"
-          },
+          "datasource": "mysql",
           "format": "table",
           "group": [],
           "metricColumn": "none",
           "queryType": "randomWalk",
           "rawQuery": true,
-          "rawSql": "select \n  i.issue_key as 'Issue Number',\n  i.title as 'Title',\n  (TIMESTAMPDIFF(MINUTE, i.created_date,NOW()))/1440 as 'Queue Time in Days',\n  i.url as 'Url'\nfrom \n  lake.issues i\n\tjoin board_issues bi on i.id = bi.issue_id\n\tjoin boards b on bi.board_id = b.id\nwhere\n  i.type in ($issue_type)\n  and i.status != 'DONE'\n  and i.assignee_name = ''\n  and b.id in ($board_id)\norder by 'Queue Time' desc",
+          "rawSql": "select \n  i.issue_key as 'Issue Number',\n  i.title as 'Title',\n  (TIMESTAMPDIFF(MINUTE, i.created_date,NOW()))/1440 as 'Queue Time in Days',\n  i.url as 'Url'\nfrom \n  issues i\n\tjoin board_issues bi on i.id = bi.issue_id\n\tjoin boards b on bi.board_id = b.id\nwhere\n  i.type in (${issue_type})\n  and i.status != 'DONE'\n  and i.assignee_name = ''\n  and b.id in (${board_id})\norder by 'Queue Time' desc",
           "refId": "A",
           "select": [
             [
@@ -1461,10 +1541,7 @@
       "type": "table"
     },
     {
-      "datasource": {
-        "type": "mysql",
-        "uid": "P430005175C4C7810"
-      },
+      "datasource": "mysql",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1496,8 +1573,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1515,6 +1591,13 @@
         "y": 45
       },
       "id": 2,
+      "links": [
+        {
+          "targetBlank": true,
+          "title": "Bug Count per 1k Lines of Code",
+          "url": "https://devlake.apache.org/docs/Metrics/BugCountPer1kLinesOfCode"
+        }
+      ],
       "options": {
         "barRadius": 0,
         "barWidth": 0.71,
@@ -1541,16 +1624,14 @@
       },
       "targets": [
         {
-          "datasource": {
-            "type": "mysql",
-            "uid": "P430005175C4C7810"
-          },
+          "datasource": "mysql",
+          "editorMode": "code",
           "format": "table",
           "group": [],
           "metricColumn": "none",
           "queryType": "randomWalk",
           "rawQuery": true,
-          "rawSql": "with bugs as (  \n  select \n    DATE_ADD(date(i.created_date), INTERVAL -WEEKDAY(date(i.created_date)) DAY) as time,\n    count(*) as bug_count\n  from\n    lake.issues as i\n\t  join lake.board_issues bi on i.id = bi.issue_id\n\t  join lake.boards b on bi.board_id = b.id\n  where \n    i.type in ($issue_type)\n    and $__timeFilter(i.created_date)\n    and b.id in ($board_id)\n  group by time\n  order by time desc\n),\n\ncalendar_date as(\n\tSELECT CAST((SYSDATE()-INTERVAL (H+T+U) DAY) AS date) d\n\tFROM ( SELECT 0 H\n\t\t\tUNION ALL SELECT 100 UNION ALL SELECT 200 UNION ALL SELECT 300\n\t\t) H CROSS JOIN ( SELECT 0 T\n\t\t\tUNION ALL SELECT  10 UNION ALL SELECT  20 UNION ALL SELECT  30\n\t\t\tUNION ALL SELECT  40 UNION ALL SELECT  50 UNION ALL SELECT  60\n\t\t\tUNION ALL SELECT  70 UNION ALL SELECT  80 UNION ALL SELECT  90\n\t\t) T CROSS JOIN ( SELECT 0 U\n\t\t\tUNION ALL SELECT   1 UNION ALL SELECT   2 UNION ALL SELECT   3\n\t\t\tUNION ALL SELECT   4 UNION ALL SELECT   5 UNION ALL SELECT   6\n\t\t\tUNION ALL SELECT   7 UNION ALL SELECT   8 UNION ALL SELECT   9\n\t\t) U\n\tWHERE\n\t\t(SYSDATE()-INTERVAL (H+T+U) DAY) >= (SYSDATE()-INTERVAL 6 MONTH)\n),\n\ncalendar_weeks as(\n  select \n  \tdistinct date(DATE_ADD(date(d), INTERVAL -WEEKDAY(date(d)) DAY)) as start_of_week\n  FROM calendar_date\n  ORDER BY 1 asc\n)\n\n\nselect \n  concat(date_format(cw.start_of_week,'%m/%d'), ' - ', date_format(DATE_ADD(cw.start_of_week, INTERVAL +6 DAY),'%m/%d')) as week,\n  case when bug_count is not null then bug_count else 0 end as 'Weekly New Bugs'\nfrom calendar_weeks cw left join bugs b on cw.start_of_week = b.time\norder by cw.start_of_week asc\n",
+          "rawSql": "with bugs as (  \n  select \n    DATE_ADD(date(i.created_date), INTERVAL -WEEKDAY(date(i.created_date)) DAY) as time,\n    count(distinct i.id) as bug_count\n  from\n    issues as i\n\t  join board_issues bi on i.id = bi.issue_id\n\t  join boards b on bi.board_id = b.id\n  where \n    i.type in (${issue_type})\n    and $__timeFilter(i.created_date)\n    and b.id in (${board_id})\n  group by time\n  order by time desc\n),\n\ncalendar_date as(\n\tSELECT CAST(($__timeTo()-INTERVAL (H+T+U) DAY) AS date) d\n\tFROM ( SELECT 0 H\n\t\t\tUNION ALL SELECT 100 UNION ALL SELECT 200 UNION ALL SELECT 300\n\t\t) H CROSS JOIN ( SELECT 0 T\n\t\t\tUNION ALL SELECT  10 UNION ALL SELECT  20 UNION ALL SELECT  30\n\t\t\tUNION ALL SELECT  40 UNION ALL SELECT  50 UNION ALL SELECT  60\n\t\t\tUNION ALL SELECT  70 UNION ALL SELECT  80 UNION ALL SELECT  90\n\t\t) T CROSS JOIN ( SELECT 0 U\n\t\t\tUNION ALL SELECT   1 UNION ALL SELECT   2 UNION ALL SELECT   3\n\t\t\tUNION ALL SELECT   4 UNION ALL SELECT   5 UNION ALL SELECT   6\n\t\t\tUNION ALL SELECT   7 UNION ALL SELECT   8 UNION ALL SELECT   9\n\t\t) U\n\tWHERE\n\t\t($__timeTo()-INTERVAL (H+T+U) DAY) >= ($__timeTo()-INTERVAL 6 MONTH)\n),\n\ncalendar_weeks as(\n  select \n  \tdistinct date(DATE_ADD(date(d), INTERVAL -WEEKDAY(date(d)) DAY)) as start_of_week\n  FROM calendar_date\n  ORDER BY 1 asc\n)\n\n\nselect \n  concat(date_format(cw.start_of_week,'%m/%d'), ' - ', date_format(DATE_ADD(cw.start_of_week, INTERVAL +6 DAY),'%m/%d')) as week,\n  case when bug_count is not null then bug_count else 0 end as 'Weekly New Bugs'\nfrom calendar_weeks cw left join bugs b on cw.start_of_week = b.time\norder by cw.start_of_week asc\n",
           "refId": "A",
           "select": [
             [
@@ -1562,6 +1643,23 @@
               }
             ]
           ],
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          },
           "table": "_devlake_migration_history",
           "timeColumn": "created_at",
           "timeColumnType": "timestamp",
@@ -1578,10 +1676,7 @@
       "type": "barchart"
     },
     {
-      "datasource": {
-        "type": "mysql",
-        "uid": "P430005175C4C7810"
-      },
+      "datasource": "mysql",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1613,8 +1708,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1632,6 +1726,13 @@
         "y": 54
       },
       "id": 20,
+      "links": [
+        {
+          "targetBlank": true,
+          "title": "Bug Count per 1k Lines of Code",
+          "url": "https://devlake.apache.org/docs/Metrics/BugCountPer1kLinesOfCode"
+        }
+      ],
       "options": {
         "barRadius": 0,
         "barWidth": 0.71,
@@ -1658,16 +1759,14 @@
       },
       "targets": [
         {
-          "datasource": {
-            "type": "mysql",
-            "uid": "P430005175C4C7810"
-          },
+          "datasource": "mysql",
+          "editorMode": "code",
           "format": "table",
           "group": [],
           "metricColumn": "none",
           "queryType": "randomWalk",
           "rawQuery": true,
-          "rawSql": "with bugs as (\n  select \n    DATE_ADD(date(i.resolution_date), INTERVAL -WEEKDAY(date(i.resolution_date)) DAY) as time,\n    count(*) as bug_count\n  from\n    lake.issues as i\n\t  join lake.board_issues bi on i.id = bi.issue_id\n\t  join lake.boards b on bi.board_id = b.id\n  where \n    i.type in ($issue_type)\n    and status = 'DONE'\n    and $__timeFilter(i.resolution_date)\n    and b.id in ($board_id)\n  group by time\n  order by time desc\n),\n\ncalendar_date as(\n\tSELECT CAST((SYSDATE()-INTERVAL (H+T+U) DAY) AS date) d\n\tFROM ( SELECT 0 H\n\t\t\tUNION ALL SELECT 100 UNION ALL SELECT 200 UNION ALL SELECT 300\n\t\t) H CROSS JOIN ( SELECT 0 T\n\t\t\tUNION ALL SELECT  10 UNION ALL SELECT  20 UNION ALL SELECT  30\n\t\t\tUNION ALL SELECT  40 UNION ALL SELECT  50 UNION ALL SELECT  60\n\t\t\tUNION ALL SELECT  70 UNION ALL SELECT  80 UNION ALL SELECT  90\n\t\t) T CROSS JOIN ( SELECT 0 U\n\t\t\tUNION ALL SELECT   1 UNION ALL SELECT   2 UNION ALL SELECT   3\n\t\t\tUNION ALL SELECT   4 UNION ALL SELECT   5 UNION ALL SELECT   6\n\t\t\tUNION ALL SELECT   7 UNION ALL SELECT   8 UNION ALL SELECT   9\n\t\t) U\n\tWHERE\n\t\t(SYSDATE()-INTERVAL (H+T+U) DAY) >= (SYSDATE()-INTERVAL 6 MONTH)\n),\n\ncalendar_weeks as(\n  select \n  \tdistinct date(DATE_ADD(date(d), INTERVAL -WEEKDAY(date(d)) DAY)) as start_of_week\n  FROM calendar_date\n  ORDER BY 1 asc\n)\n\nselect \n  concat(date_format(cw.start_of_week,'%m/%d'), ' - ', date_format(DATE_ADD(cw.start_of_week, INTERVAL +6 DAY),'%m/%d')) as week,\n  case when bug_count is not null then bug_count else 0 end as 'Weekly Closed Bugs'\nfrom calendar_weeks cw left join bugs b on cw.start_of_week = b.time\norder by cw.start_of_week asc",
+          "rawSql": "with bugs as (\n  select \n    DATE_ADD(date(i.resolution_date), INTERVAL -WEEKDAY(date(i.resolution_date)) DAY) as time,\n    count(distinct i.id) as bug_count\n  from\n    issues as i\n\t  join board_issues bi on i.id = bi.issue_id\n\t  join boards b on bi.board_id = b.id\n  where \n    i.type in (${issue_type})\n    and status = 'DONE'\n    and $__timeFilter(i.resolution_date)\n    and b.id in (${board_id})\n  group by time\n  order by time desc\n),\n\ncalendar_date as(\n\tSELECT CAST(($__timeTo()-INTERVAL (H+T+U) DAY) AS date) d\n\tFROM ( SELECT 0 H\n\t\t\tUNION ALL SELECT 100 UNION ALL SELECT 200 UNION ALL SELECT 300\n\t\t) H CROSS JOIN ( SELECT 0 T\n\t\t\tUNION ALL SELECT  10 UNION ALL SELECT  20 UNION ALL SELECT  30\n\t\t\tUNION ALL SELECT  40 UNION ALL SELECT  50 UNION ALL SELECT  60\n\t\t\tUNION ALL SELECT  70 UNION ALL SELECT  80 UNION ALL SELECT  90\n\t\t) T CROSS JOIN ( SELECT 0 U\n\t\t\tUNION ALL SELECT   1 UNION ALL SELECT   2 UNION ALL SELECT   3\n\t\t\tUNION ALL SELECT   4 UNION ALL SELECT   5 UNION ALL SELECT   6\n\t\t\tUNION ALL SELECT   7 UNION ALL SELECT   8 UNION ALL SELECT   9\n\t\t) U\n\tWHERE\n\t\t($__timeTo()-INTERVAL (H+T+U) DAY) >= ($__timeTo()-INTERVAL 6 MONTH)\n),\n\ncalendar_weeks as(\n  select \n  \tdistinct date(DATE_ADD(date(d), INTERVAL -WEEKDAY(date(d)) DAY)) as start_of_week\n  FROM calendar_date\n  ORDER BY 1 asc\n)\n\nselect \n  concat(date_format(cw.start_of_week,'%m/%d'), ' - ', date_format(DATE_ADD(cw.start_of_week, INTERVAL +6 DAY),'%m/%d')) as week,\n  case when bug_count is not null then bug_count else 0 end as 'Weekly Closed Bugs'\nfrom calendar_weeks cw left join bugs b on cw.start_of_week = b.time\norder by cw.start_of_week asc",
           "refId": "A",
           "select": [
             [
@@ -1679,6 +1778,23 @@
               }
             ]
           ],
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          },
           "table": "_devlake_migration_history",
           "timeColumn": "created_at",
           "timeColumnType": "timestamp",
@@ -1695,10 +1811,7 @@
       "type": "barchart"
     },
     {
-      "datasource": {
-        "type": "mysql",
-        "uid": "P430005175C4C7810"
-      },
+      "datasource": "mysql",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1730,8 +1843,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1749,6 +1861,13 @@
         "y": 64
       },
       "id": 21,
+      "links": [
+        {
+          "targetBlank": true,
+          "title": "Bug Count per 1k Lines of Code",
+          "url": "https://devlake.apache.org/docs/Metrics/BugCountPer1kLinesOfCode"
+        }
+      ],
       "options": {
         "barRadius": 0,
         "barWidth": 0.71,
@@ -1777,16 +1896,14 @@
       },
       "targets": [
         {
-          "datasource": {
-            "type": "mysql",
-            "uid": "P430005175C4C7810"
-          },
+          "datasource": "mysql",
+          "editorMode": "code",
           "format": "table",
           "group": [],
           "metricColumn": "none",
           "queryType": "randomWalk",
           "rawQuery": true,
-          "rawSql": "with calendar_date as(\n\tSELECT CAST((SYSDATE()-INTERVAL (H+T+U) DAY) AS date) d\n\tFROM ( SELECT 0 H\n\t\t\tUNION ALL SELECT 100 UNION ALL SELECT 200 UNION ALL SELECT 300\n\t\t) H CROSS JOIN ( SELECT 0 T\n\t\t\tUNION ALL SELECT  10 UNION ALL SELECT  20 UNION ALL SELECT  30\n\t\t\tUNION ALL SELECT  40 UNION ALL SELECT  50 UNION ALL SELECT  60\n\t\t\tUNION ALL SELECT  70 UNION ALL SELECT  80 UNION ALL SELECT  90\n\t\t) T CROSS JOIN ( SELECT 0 U\n\t\t\tUNION ALL SELECT   1 UNION ALL SELECT   2 UNION ALL SELECT   3\n\t\t\tUNION ALL SELECT   4 UNION ALL SELECT   5 UNION ALL SELECT   6\n\t\t\tUNION ALL SELECT   7 UNION ALL SELECT   8 UNION ALL SELECT   9\n\t\t) U\n\tWHERE\n\t\t(SYSDATE()-INTERVAL (H+T+U) DAY) >= (SYSDATE()-INTERVAL 6 MONTH)\n),\n\ncalendar_weeks as(\n  select \n  \tdistinct date(DATE_ADD(date(d), INTERVAL -WEEKDAY(date(d)) DAY)) as start_of_week\n  FROM calendar_date\n  ORDER BY 1 asc\n),\n\ncreated_bugs as (  \n  select \n    DATE_ADD(date(i.created_date), INTERVAL -WEEKDAY(date(i.created_date)) DAY) as time,\n    count(*) as bug_count\n  from\n    lake.issues as i\n\t  join lake.board_issues bi on i.id = bi.issue_id\n\t  join lake.boards b on bi.board_id = b.id\n  where \n    i.type in ($issue_type)\n    and $__timeFilter(i.created_date)\n    and b.id in ($board_id)\n  group by time\n  order by time desc\n),\n\nresolved_bugs as (\n  select \n    DATE_ADD(date(i.resolution_date), INTERVAL -WEEKDAY(date(i.resolution_date)) DAY) as time,\n    count(*) as bug_count\n  from\n    lake.issues as i\n\t  join lake.board_issues bi on i.id = bi.issue_id\n\t  join lake.boards b on bi.board_id = b.id\n  where \n    i.type in ($issue_type)\n    and status = 'DONE'\n    and $__timeFilter(i.resolution_date)\n    and b.id in ($board_id)\n  group by time\n  order by time desc\n),\n\nweekly_new_bug as(\n  select\n    cw.start_of_week as week,\n    case when bug_count is not null then bug_count else 0 end as weekly_new_bug\n  from calendar_weeks cw left join created_bugs cb on cw.start_of_week = cb.time\n),\n\nweekly_closed_bug as(\n  select\n    cw.start_of_week as week,\n    case when bug_count is not null then bug_count else 0 end as weekly_closed_bug\n  from calendar_weeks cw left join resolved_bugs cb on cw.start_of_week = cb.time\n),\n\nweekly_updates as(\n  SELECT t1.week, weekly_new_bug, weekly_closed_bug FROM weekly_new_bug t1\n  LEFT JOIN weekly_closed_bug t2 ON t1.week = t2.week\n  UNION\n  SELECT t1.week, weekly_new_bug, weekly_closed_bug FROM weekly_new_bug t1\n  RIGHT JOIN weekly_closed_bug t2 ON t1.week = t2.week\n),\n\n\noriginal_open_bugs as (\n  SELECT \n    count(distinct i.id) as original_open_bug_count\n  FROM\n    lake.issues as i\n\t  join lake.board_issues bi on i.id = bi.issue_id\n\t  join lake.boards b on bi.board_id = b.id\n  where \n    i.type in ($issue_type)\n    and i.created_date < $__timeFrom()\n    and (i.status != 'DONE' or $__timeFilter(i.resolution_date))\n    and b.id in ($board_id)\n),\n\nweekly_updated_without_null as(\n  SELECT \n    week, \n    COALESCE(weekly_new_bug,0) as weekly_new_bug, \n    COALESCE(weekly_closed_bug,0) as weekly_closed_bug,\n    original_open_bug_count\n  from weekly_updates, original_open_bugs\n  where week is not null\n),\n\nweekly_delta as(\n  SELECT \n    *,\n    (weekly_new_bug - weekly_closed_bug) as weekly_delta\n  from weekly_updated_without_null\n  order by week asc\n),\n\nfinal_data as(\n  SELECT \n    *,\n    concat(date_format(week,'%m/%d'), ' - ', date_format(DATE_ADD(week, INTERVAL +6 DAY),'%m/%d')) as _week,\n    sum(weekly_delta) over(order by week asc) as weekly_accumulated\n  from weekly_delta\n)\n\nSELECT \n  _week,\n  (original_open_bug_count + weekly_accumulated) as \"Total No. of Outstanding Bugs By the End of Week\" from final_data",
+          "rawSql": "with calendar_date as(\n\tSELECT CAST(($__timeTo()-INTERVAL (H+T+U) DAY) AS date) d\n\tFROM ( SELECT 0 H\n\t\t\tUNION ALL SELECT 100 UNION ALL SELECT 200 UNION ALL SELECT 300\n\t\t) H CROSS JOIN ( SELECT 0 T\n\t\t\tUNION ALL SELECT  10 UNION ALL SELECT  20 UNION ALL SELECT  30\n\t\t\tUNION ALL SELECT  40 UNION ALL SELECT  50 UNION ALL SELECT  60\n\t\t\tUNION ALL SELECT  70 UNION ALL SELECT  80 UNION ALL SELECT  90\n\t\t) T CROSS JOIN ( SELECT 0 U\n\t\t\tUNION ALL SELECT   1 UNION ALL SELECT   2 UNION ALL SELECT   3\n\t\t\tUNION ALL SELECT   4 UNION ALL SELECT   5 UNION ALL SELECT   6\n\t\t\tUNION ALL SELECT   7 UNION ALL SELECT   8 UNION ALL SELECT   9\n\t\t) U\n\tWHERE\n\t\t($__timeTo()-INTERVAL (H+T+U) DAY) >= ($__timeTo()-INTERVAL 6 MONTH)\n),\n\ncalendar_weeks as(\n  select \n  \tdistinct date(DATE_ADD(date(d), INTERVAL -WEEKDAY(date(d)) DAY)) as start_of_week\n  FROM calendar_date\n  ORDER BY 1 asc\n),\n\ncreated_bugs as (  \n  select \n    DATE_ADD(date(i.created_date), INTERVAL -WEEKDAY(date(i.created_date)) DAY) as time,\n    count(distinct i.id) as bug_count\n  from\n    issues as i\n\t  join board_issues bi on i.id = bi.issue_id\n\t  join boards b on bi.board_id = b.id\n  where \n    i.type in (${issue_type})\n    and $__timeFilter(i.created_date)\n    and b.id in (${board_id})\n  group by time\n  order by time desc\n),\n\nresolved_bugs as (\n  select \n    DATE_ADD(date(i.resolution_date), INTERVAL -WEEKDAY(date(i.resolution_date)) DAY) as time,\n    count(distinct i.id) as bug_count\n  from\n    issues as i\n\t  join board_issues bi on i.id = bi.issue_id\n\t  join boards b on bi.board_id = b.id\n  where \n    i.type in (${issue_type})\n    and status = 'DONE'\n    and $__timeFilter(i.resolution_date)\n    and b.id in (${board_id})\n  group by time\n  order by time desc\n),\n\nweekly_new_bug as(\n  select\n    cw.start_of_week as week,\n    case when bug_count is not null then bug_count else 0 end as weekly_new_bug\n  from calendar_weeks cw left join created_bugs cb on cw.start_of_week = cb.time\n),\n\nweekly_closed_bug as(\n  select\n    cw.start_of_week as week,\n    case when bug_count is not null then bug_count else 0 end as weekly_closed_bug\n  from calendar_weeks cw left join resolved_bugs cb on cw.start_of_week = cb.time\n),\n\nweekly_updates as(\n  SELECT t1.week, weekly_new_bug, weekly_closed_bug FROM weekly_new_bug t1\n  LEFT JOIN weekly_closed_bug t2 ON t1.week = t2.week\n  UNION\n  SELECT t1.week, weekly_new_bug, weekly_closed_bug FROM weekly_new_bug t1\n  RIGHT JOIN weekly_closed_bug t2 ON t1.week = t2.week\n),\n\n\noriginal_open_bugs as (\n  SELECT \n    count(distinct i.id) as original_open_bug_count\n  FROM\n    issues as i\n\t  join board_issues bi on i.id = bi.issue_id\n\t  join boards b on bi.board_id = b.id\n  where \n    i.type in (${issue_type})\n    and i.created_date < $__timeFrom()\n    and (i.status != 'DONE' or $__timeFilter(i.resolution_date))\n    and b.id in (${board_id})\n),\n\nweekly_updated_without_null as(\n  SELECT \n    week, \n    COALESCE(weekly_new_bug,0) as weekly_new_bug, \n    COALESCE(weekly_closed_bug,0) as weekly_closed_bug,\n    original_open_bug_count\n  from weekly_updates, original_open_bugs\n  where week is not null\n),\n\nweekly_delta as(\n  SELECT \n    *,\n    (weekly_new_bug - weekly_closed_bug) as weekly_delta\n  from weekly_updated_without_null\n  order by week asc\n),\n\nfinal_data as(\n  SELECT \n    *,\n    concat(date_format(week,'%m/%d'), ' - ', date_format(DATE_ADD(week, INTERVAL +6 DAY),'%m/%d')) as _week,\n    sum(weekly_delta) over(order by week asc) as weekly_accumulated\n  from weekly_delta\n)\n\nSELECT \n  _week,\n  (original_open_bug_count + weekly_accumulated) as \"Total No. of Outstanding Bugs By the End of Week\" from final_data",
           "refId": "A",
           "select": [
             [
@@ -1798,6 +1915,23 @@
               }
             ]
           ],
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          },
           "table": "_devlake_migration_history",
           "timeColumn": "created_at",
           "timeColumnType": "timestamp",
@@ -1834,7 +1968,7 @@
         "content": "<br/>\n\nThis dashboard is created based on this [data schema](https://devlake.apache.org/docs/DataModels/DevLakeDomainLayerSchema). Want to add more metrics? Please follow the [guide](https://devlake.apache.org/docs/UserManuals/Dashboards/GrafanaUserGuide).",
         "mode": "markdown"
       },
-      "pluginVersion": "9.5.1",
+      "pluginVersion": "9.5.15",
       "targets": [
         {
           "datasource": {
@@ -1851,7 +1985,9 @@
   "refresh": "",
   "schemaVersion": 38,
   "style": "dark",
-  "tags": [],
+  "tags": [
+    "Engineering Leads Dashboard"
+  ],
   "templating": {
     "list": [
       {
@@ -1860,10 +1996,7 @@
           "text": "All",
           "value": "$__all"
         },
-        "datasource": {
-          "type": "mysql",
-          "uid": "P430005175C4C7810"
-        },
+        "datasource": "mysql",
         "definition": "select concat(name, '-', id) as text from boards",
         "hide": 0,
         "includeAll": true,
@@ -1881,13 +2014,10 @@
       {
         "current": {
           "selected": false,
-          "text": "BUG",
-          "value": "BUG"
+          "text": "All",
+          "value": "$__all"
         },
-        "datasource": {
-          "type": "mysql",
-          "uid": "P430005175C4C7810"
-        },
+        "datasource": "mysql",
         "definition": "select distinct type from issues",
         "hide": 0,
         "includeAll": true,
@@ -1912,10 +2042,7 @@
             "$__all"
           ]
         },
-        "datasource": {
-          "type": "mysql",
-          "uid": "P430005175C4C7810"
-        },
+        "datasource": "mysql",
         "definition": "select distinct priority from issues",
         "hide": 0,
         "includeAll": true,

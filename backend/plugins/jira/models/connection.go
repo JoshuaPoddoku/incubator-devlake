@@ -18,6 +18,7 @@ limitations under the License.
 package models
 
 import (
+	"github.com/apache/incubator-devlake/core/utils"
 	"net/http"
 
 	"github.com/apache/incubator-devlake/core/errors"
@@ -44,6 +45,12 @@ type JiraConn struct {
 	helper.AccessToken    `mapstructure:",squash"`
 }
 
+func (jc *JiraConn) Sanitize() JiraConn {
+	jc.Password = ""
+	jc.AccessToken.Token = utils.SanitizeString(jc.AccessToken.Token)
+	return *jc
+}
+
 // SetupAuthentication implements the `IAuthentication` interface by delegating
 // the actual logic to the `MultiAuth` struct to help us write less code
 func (jc *JiraConn) SetupAuthentication(req *http.Request) errors.Error {
@@ -58,4 +65,35 @@ type JiraConnection struct {
 
 func (JiraConnection) TableName() string {
 	return "_tool_jira_connections"
+}
+
+func (connection *JiraConnection) MergeFromRequest(target *JiraConnection, body map[string]interface{}) error {
+	token := target.Token
+	password := target.Password
+	authMethod := target.AuthMethod
+
+	if err := helper.DecodeMapStruct(body, target, true); err != nil {
+		return err
+	}
+
+	modifiedToken := target.Token
+	modifiedPassword := target.Password
+	modifiedAuthMethod := target.AuthMethod
+
+	// maybe auth method has changed
+	if authMethod == modifiedAuthMethod {
+		if modifiedToken == "" || modifiedToken == utils.SanitizeString(token) {
+			target.Token = token
+		}
+		if modifiedPassword == "" || modifiedPassword == utils.SanitizeString(password) {
+			target.Password = password
+		}
+	}
+
+	return nil
+}
+
+func (connection JiraConnection) Sanitize() JiraConnection {
+	connection.JiraConn = connection.JiraConn.Sanitize()
+	return connection
 }

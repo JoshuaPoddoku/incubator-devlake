@@ -20,6 +20,7 @@ package runner
 import (
 	gocontext "context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/apache/incubator-devlake/core/context"
@@ -46,18 +47,19 @@ func RunTask(
 	if err := db.First(task, dal.Where("id = ?", taskId)); err != nil {
 		return err
 	}
-	if task.Status == models.TASK_COMPLETED {
-		return errors.Default.New("invalid task status")
-	}
 	dbPipeline := &models.Pipeline{}
 	if err := db.First(dbPipeline, dal.Where("id = ? ", task.PipelineId)); err != nil {
 		return err
 	}
+
 	logger, err := getTaskLogger(basicRes.GetLogger(), task)
 	if err != nil {
 		return err
 	}
 	beganAt := time.Now()
+	if dbPipeline.BeganAt != nil {
+		beganAt = *dbPipeline.BeganAt
+	}
 	// make sure task status always correct even if it panicked
 	defer func() {
 		if r := recover(); r != nil {
@@ -106,19 +108,20 @@ func RunTask(
 			}
 		}
 		// update finishedTasks
-		dbe := db.UpdateColumn(
+		errors.Must(db.UpdateColumn(
 			&models.Pipeline{},
 			"finished_tasks", dal.Expr("finished_tasks + 1"),
 			dal.Where("id=?", task.PipelineId),
-		)
-		if dbe != nil {
-			logger.Error(dbe, "update pipeline state failed")
-		}
+		))
 		// not return err if the `SkipOnFail` is true and the error is not canceled
 		if dbPipeline.SkipOnFail && !errors.Is(err, gocontext.Canceled) {
 			err = nil
 		}
 	}()
+
+	if task.Status == models.TASK_COMPLETED {
+		return nil
+	}
 
 	// start execution
 	logger.Info("start executing task: %d", task.ID)
@@ -136,6 +139,7 @@ func RunTask(
 		basicRes.ReplaceLogger(logger),
 		task,
 		progress,
+		&dbPipeline.SyncPolicy,
 	)
 	return err
 }
@@ -146,6 +150,7 @@ func RunPluginTask(
 	basicRes context.BasicRes,
 	task *models.Task,
 	progress chan plugin.RunningProgress,
+	syncPolicy *models.SyncPolicy,
 ) errors.Error {
 	pluginMeta, err := plugin.GetPlugin(task.Plugin)
 	if err != nil {
@@ -161,6 +166,7 @@ func RunPluginTask(
 		task,
 		pluginTask,
 		progress,
+		syncPolicy,
 	)
 }
 
@@ -171,6 +177,7 @@ func RunPluginSubTasks(
 	task *models.Task,
 	pluginTask plugin.PluginTask,
 	progress chan plugin.RunningProgress,
+	syncPolicy *models.SyncPolicy,
 ) errors.Error {
 	logger := basicRes.GetLogger()
 	logger.Info("start plugin")
@@ -212,8 +219,12 @@ func RunPluginSubTasks(
 		}
 	}
 
-	// make sure `Required` subtasks are always enabled
+	// 1. make sure `Collect` subtasks skip if `SkipCollectors` is true
+	// 2. make sure `Required` subtasks are always enabled
 	for _, subtaskMeta := range subtaskMetas {
+		if syncPolicy != nil && syncPolicy.SkipCollectors && strings.Contains(strings.ToLower(subtaskMeta.Name), "collect") {
+			subtasksFlag[subtaskMeta.Name] = false
+		}
 		if subtaskMeta.Required {
 			subtasksFlag[subtaskMeta.Name] = true
 		}
@@ -236,7 +247,46 @@ func RunPluginSubTasks(
 	if err != nil {
 		return errors.Default.Wrap(err, fmt.Sprintf("error preparing task data for %s", task.Plugin))
 	}
+	taskCtx.SetSyncPolicy(syncPolicy)
 	taskCtx.SetData(taskData)
+
+	// record subtasks sequence to DB
+	collectSubtaskNumber := 0
+	otherSubtaskNumber := 0
+	isCollector := false
+	subtask := []models.Subtask{}
+	for _, subtaskMeta := range subtaskMetas {
+		subtaskCtx, err := taskCtx.SubTaskContext(subtaskMeta.Name)
+		if err != nil {
+			// sth went wrong
+			return errors.Default.Wrap(err, fmt.Sprintf("error getting context subtask %s", subtaskMeta.Name))
+		}
+		if subtaskCtx == nil {
+			// subtask was disabled
+			continue
+		}
+		if strings.Contains(strings.ToLower(subtaskMeta.Name), "collect") || strings.Contains(strings.ToLower(subtaskMeta.Name), "clone git repo") {
+			collectSubtaskNumber++
+			isCollector = true
+		} else {
+			otherSubtaskNumber++
+			isCollector = false
+		}
+		s := models.Subtask{
+			Name:        subtaskCtx.GetName(),
+			TaskID:      task.ID,
+			IsCollector: isCollector,
+		}
+		if isCollector {
+			s.Sequence = collectSubtaskNumber
+		} else {
+			s.Sequence = otherSubtaskNumber
+		}
+		subtask = append(subtask, s)
+	}
+	if err := basicRes.GetDal().CreateOrUpdate(subtask); err != nil {
+		basicRes.GetLogger().Error(err, "error writing subtask list to DB")
+	}
 
 	// execute subtasks in order
 	taskCtx.SetProgress(0, steps)
@@ -251,9 +301,7 @@ func RunPluginSubTasks(
 			// subtask was disabled
 			continue
 		}
-
 		// run subtask
-		logger.Info("executing subtask %s", subtaskMeta.Name)
 		subtaskNumber++
 		if progress != nil {
 			progress <- plugin.RunningProgress{
@@ -262,11 +310,32 @@ func RunPluginSubTasks(
 				SubTaskNumber: subtaskNumber,
 			}
 		}
-		err = runSubtask(basicRes, subtaskCtx, task.ID, subtaskNumber, subtaskMeta.EntryPoint)
-		if err != nil {
-			err = errors.SubtaskErr.Wrap(err, fmt.Sprintf("subtask %s ended unexpectedly", subtaskMeta.Name), errors.WithData(&subtaskMeta))
-			logger.Error(err, "")
-			return err
+		subtaskFinsied := false
+		if !subtaskMeta.ForceRunOnResume {
+			sfc := errors.Must1(
+				basicRes.GetDal().Count(
+					dal.From(&models.Subtask{}), dal.Where("task_id = ? AND name = ? AND finished_at IS NOT NULL", task.ID, subtaskMeta.Name),
+				),
+			)
+			subtaskFinsied = sfc > 0
+		}
+		if subtaskFinsied {
+			logger.Info("subtask %s already finished previously", subtaskMeta.Name)
+		} else {
+			logger.Info("executing subtask %s", subtaskMeta.Name)
+			err = runSubtask(basicRes, subtaskCtx, task.ID, subtaskNumber, subtaskMeta.EntryPoint)
+			if err != nil {
+				err = errors.SubtaskErr.Wrap(err, fmt.Sprintf("subtask %s ended unexpectedly", subtaskMeta.Name), errors.WithData(&subtaskMeta))
+				logger.Error(err, "")
+				where := dal.Where("task_id = ? and name = ?", task.ID, subtaskCtx.GetName())
+				if err := basicRes.GetDal().UpdateColumns(subtask, []dal.DalSet{
+					{ColumnName: "is_failed", Value: 1},
+					{ColumnName: "message", Value: err.Error()},
+				}, where); err != nil {
+					basicRes.GetLogger().Error(err, "error writing subtask %v status to DB", subtaskCtx.GetName())
+				}
+				return err
+			}
 		}
 		taskCtx.IncProgress(1)
 	}
@@ -278,6 +347,7 @@ func RunPluginSubTasks(
 func UpdateProgressDetail(basicRes context.BasicRes, taskId uint64, progressDetail *models.TaskProgressDetail, p *plugin.RunningProgress) {
 	task := &models.Task{}
 	task.ID = taskId
+	subtask := &models.Subtask{}
 	switch p.Type {
 	case plugin.TaskSetProgress:
 		progressDetail.TotalSubTasks = p.Total
@@ -292,12 +362,19 @@ func UpdateProgressDetail(basicRes context.BasicRes, taskId uint64, progressDeta
 		}
 	case plugin.SubTaskSetProgress:
 		progressDetail.TotalRecords = p.Total
-		progressDetail.FinishedRecords = p.Current
 	case plugin.SubTaskIncProgress:
 		progressDetail.FinishedRecords = p.Current
 	case plugin.SetCurrentSubTask:
 		progressDetail.SubTaskName = p.SubTaskName
 		progressDetail.SubTaskNumber = p.SubTaskNumber
+	}
+	// update subtask progress
+	where := dal.Where("task_id = ? and name = ?", taskId, progressDetail.SubTaskName)
+	err := basicRes.GetDal().UpdateColumns(subtask, []dal.DalSet{
+		{ColumnName: "finished_records", Value: progressDetail.FinishedRecords},
+	}, where)
+	if err != nil {
+		basicRes.GetLogger().Error(err, "failed to update _devlake_subtasks progress")
 	}
 }
 
@@ -315,17 +392,27 @@ func runSubtask(
 		Number:  subtaskNumber,
 		BeganAt: &beginAt,
 	}
+	recordSubtask(basicRes, subtask)
+	// defer to record subtask status
 	defer func() {
 		finishedAt := time.Now()
 		subtask.FinishedAt = &finishedAt
 		subtask.SpentSeconds = finishedAt.Unix() - beginAt.Unix()
+
 		recordSubtask(basicRes, subtask)
 	}()
 	return entryPoint(ctx)
 }
 
 func recordSubtask(basicRes context.BasicRes, subtask *models.Subtask) {
-	if err := basicRes.GetDal().Create(subtask); err != nil {
+	where := dal.Where("task_id = ? and name = ?", subtask.TaskID, subtask.Name)
+	if err := basicRes.GetDal().UpdateColumns(subtask, []dal.DalSet{
+		{ColumnName: "began_at", Value: subtask.BeganAt},
+		{ColumnName: "finished_at", Value: subtask.FinishedAt},
+		{ColumnName: "spent_seconds", Value: subtask.SpentSeconds},
+		{ColumnName: "finished_records", Value: subtask.FinishedRecords},
+		{ColumnName: "number", Value: subtask.Number},
+	}, where); err != nil {
 		basicRes.GetLogger().Error(err, "error writing subtask %d status to DB: %v", subtask.ID)
 	}
 }

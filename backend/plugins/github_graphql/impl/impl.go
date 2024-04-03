@@ -74,25 +74,28 @@ func (p GithubGraphql) Name() string {
 }
 
 func (p GithubGraphql) GetTablesInfo() []dal.Tabler {
-	return []dal.Tabler{}
+	return []dal.Tabler{
+		&models.GithubDeployment{},
+	}
 }
 
 func (p GithubGraphql) SubTaskMetas() []plugin.SubTaskMeta {
 	return []plugin.SubTaskMeta{
-		//tasks.CollectRepoMeta,
-
 		// collect millstones
 		githubTasks.CollectMilestonesMeta,
 		githubTasks.ExtractMilestonesMeta,
 
 		// collect issue & pr, deps on millstone
-		tasks.CollectIssueMeta,
-		tasks.CollectPrMeta,
+		tasks.CollectIssuesMeta,
+		tasks.ExtractIssuesMeta,
+		tasks.CollectPrsMeta,
+		tasks.ExtractPrsMeta,
 
 		// collect workflow run & job
 		githubTasks.CollectRunsMeta,
 		githubTasks.ExtractRunsMeta,
-		tasks.CollectGraphqlJobsMeta,
+		tasks.CollectJobsMeta,
+		tasks.ExtractJobsMeta,
 
 		// collect others
 		githubTasks.CollectApiCommentsMeta,
@@ -104,6 +107,7 @@ func (p GithubGraphql) SubTaskMetas() []plugin.SubTaskMeta {
 
 		// collect account, deps on all before
 		tasks.CollectAccountMeta,
+		tasks.ExtractAccountsMeta,
 
 		// convert to domain layer
 		githubTasks.ConvertRunsMeta,
@@ -123,6 +127,11 @@ func (p GithubGraphql) SubTaskMetas() []plugin.SubTaskMeta {
 		githubTasks.ConvertPullRequestCommentsMeta,
 		githubTasks.ConvertMilestonesMeta,
 		githubTasks.ConvertAccountsMeta,
+
+		// deployment
+		tasks.CollectDeploymentsMeta,
+		tasks.ExtractDeploymentsMeta,
+		githubTasks.ConvertDeploymentsMeta,
 	}
 }
 
@@ -225,6 +234,9 @@ func (p GithubGraphql) PrepareTaskData(taskCtx plugin.TaskContext, options map[s
 	if err = regexEnricher.TryAdd(devops.PRODUCTION, op.ScopeConfig.ProductionPattern); err != nil {
 		return nil, errors.BadInput.Wrap(err, "invalid value for `productionPattern`")
 	}
+	if err = regexEnricher.TryAdd(devops.ENV_NAME_PATTERN, op.ScopeConfig.EnvNamePattern); err != nil {
+		return nil, errors.BadInput.Wrap(err, "invalid value for `envNamePattern`")
+	}
 
 	taskData := &githubTasks.GithubTaskData{
 		Options:       &op,
@@ -232,20 +244,11 @@ func (p GithubGraphql) PrepareTaskData(taskCtx plugin.TaskContext, options map[s
 		GraphqlClient: graphqlClient,
 		RegexEnricher: regexEnricher,
 	}
-	if op.TimeAfter != "" {
-		var timeAfter time.Time
-		timeAfter, err = errors.Convert01(time.Parse(time.RFC3339, op.TimeAfter))
-		if err != nil {
-			return nil, errors.BadInput.Wrap(err, "invalid value for `timeAfter`")
-		}
-		taskData.TimeAfter = &timeAfter
-		logger.Debug("collect data updated timeAfter %s", timeAfter)
-	}
 
 	return taskData, nil
 }
 
-// PkgPath information lost when compiled as plugin(.so)
+// RootPkgPath information lost when compiled as plugin(.so)
 func (p GithubGraphql) RootPkgPath() string {
 	return "github.com/apache/incubator-devlake/plugins/githubGraphql"
 }

@@ -21,12 +21,8 @@ import (
 	"github.com/apache/incubator-devlake/core/models/common"
 )
 
-const ENV_NAME_PATTERN = "ENV_NAME_PATTERN"
-
 type BambooScopeConfig struct {
 	common.ScopeConfig `mapstructure:",squash" json:",inline" gorm:"embedded"`
-	ConnectionId       uint64           `mapstructure:"connectionId" json:"connectionId"`
-	Name               string           `gorm:"type:varchar(255);index:idx_name_gitlab,unique" validate:"required" mapstructure:"name" json:"name"`
 	RepoMap            map[string][]int `json:"repoMap" gorm:"type:json;serializer:json"` // should be {realRepoName: [bamboo_repoId, ...]}
 	DeploymentPattern  string           `mapstructure:"deploymentPattern,omitempty" json:"deploymentPattern" gorm:"type:varchar(255)"`
 	ProductionPattern  string           `mapstructure:"productionPattern,omitempty" json:"productionPattern" gorm:"type:varchar(255)"`
@@ -35,6 +31,11 @@ type BambooScopeConfig struct {
 
 func (BambooScopeConfig) TableName() string {
 	return "_tool_bamboo_scope_configs"
+}
+
+func (cfg *BambooScopeConfig) SetConnectionId(c *BambooScopeConfig, connectionId uint64) {
+	c.ConnectionId = connectionId
+	c.ScopeConfig.ConnectionId = connectionId
 }
 
 func (cfg *BambooScopeConfig) GetRepoIdMap() map[int]string {

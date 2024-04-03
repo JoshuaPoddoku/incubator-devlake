@@ -34,12 +34,12 @@ func init() {
 }
 
 var ConvertPipelineCommitMeta = plugin.SubTaskMeta{
-	Name:             "convertPipelineCommits",
+	Name:             "Convert Pipeline Commits",
 	EntryPoint:       ConvertPipelineCommits,
 	EnabledByDefault: true,
 	Description:      "Convert tool layer table gitlab_pipeline_project into domain layer table pipeline",
 	DomainTypes:      []string{plugin.DOMAIN_TYPE_CICD},
-	Dependencies:     []*plugin.SubTaskMeta{&ConvertPipelineMeta},
+	Dependencies:     []*plugin.SubTaskMeta{&ConvertDetailPipelineMeta},
 }
 
 func ConvertPipelineCommits(taskCtx plugin.SubTaskContext) errors.Error {

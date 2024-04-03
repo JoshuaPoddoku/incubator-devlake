@@ -20,7 +20,8 @@ package impl
 import (
 	"fmt"
 	"strings"
-	"time"
+
+	coreModels "github.com/apache/incubator-devlake/core/models"
 
 	"github.com/apache/incubator-devlake/core/context"
 	"github.com/apache/incubator-devlake/core/dal"
@@ -133,13 +134,6 @@ func (p Jenkins) PrepareTaskData(taskCtx plugin.TaskContext, options map[string]
 		return nil, err
 	}
 
-	var timeAfter time.Time
-	if op.TimeAfter != "" {
-		timeAfter, err = errors.Convert01(time.Parse(time.RFC3339, op.TimeAfter))
-		if err != nil {
-			return nil, errors.BadInput.Wrap(err, "invalid value for `timeAfter`")
-		}
-	}
 	regexEnricher := helper.NewRegexEnricher()
 	if err := regexEnricher.TryAdd(devops.DEPLOYMENT, op.ScopeConfig.DeploymentPattern); err != nil {
 		return nil, errors.BadInput.Wrap(err, "invalid value for `deploymentPattern`")
@@ -153,10 +147,7 @@ func (p Jenkins) PrepareTaskData(taskCtx plugin.TaskContext, options map[string]
 		Connection:    connection,
 		RegexEnricher: regexEnricher,
 	}
-	if !timeAfter.IsZero() {
-		taskData.TimeAfter = &timeAfter
-		logger.Debug("collect data created from %s", timeAfter)
-	}
+
 	return taskData, nil
 }
 
@@ -168,8 +159,11 @@ func (p Jenkins) MigrationScripts() []plugin.MigrationScript {
 	return migrationscripts.All()
 }
 
-func (p Jenkins) MakeDataSourcePipelinePlanV200(connectionId uint64, scopes []*plugin.BlueprintScopeV200, syncPolicy plugin.BlueprintSyncPolicy) (pp plugin.PipelinePlan, sc []plugin.Scope, err errors.Error) {
-	return api.MakeDataSourcePipelinePlanV200(p.SubTaskMetas(), connectionId, scopes, &syncPolicy)
+func (p Jenkins) MakeDataSourcePipelinePlanV200(
+	connectionId uint64,
+	scopes []*coreModels.BlueprintScope,
+) (pp coreModels.PipelinePlan, sc []plugin.Scope, err errors.Error) {
+	return api.MakeDataSourcePipelinePlanV200(p.SubTaskMetas(), connectionId, scopes)
 }
 
 func (p Jenkins) ApiResources() map[string]map[string]plugin.ApiResourceHandler {
@@ -189,12 +183,19 @@ func (p Jenkins) ApiResources() map[string]map[string]plugin.ApiResourceHandler 
 		"connections/:connectionId/remote-scopes": {
 			"GET": api.RemoteScopes,
 		},
-		"connections/:connectionId/search-remote-scopes": {
-			"GET": api.SearchRemoteScopes,
+		"connections/:connectionId/test": {
+			"POST": api.TestExistingConnection,
 		},
+		// "connections/:connectionId/search-remote-scopes": {
+		// 	"GET": api.SearchRemoteScopes,
+		// },
 		"connections/:connectionId/scopes/*scopeId": {
-			"GET":    api.GetScope,
-			"PATCH":  api.UpdateScope,
+			// Behind 'GetScopeDispatcher', there are two paths so far:
+			// GetScopeLatestSyncState "connections/:connectionId/scopes/:scopeId/latest-sync-state"
+			// GetScope "connections/:connectionId/scopes/:scopeId"
+			// Because there may be slash in scopeId, so we handle it manually.
+			"GET":    api.GetScopeDispatcher,
+			"PATCH":  api.PatchScope,
 			"DELETE": api.DeleteScope,
 		},
 		"connections/:connectionId/scopes": {
@@ -205,7 +206,7 @@ func (p Jenkins) ApiResources() map[string]map[string]plugin.ApiResourceHandler 
 			"POST": api.CreateScopeConfig,
 			"GET":  api.GetScopeConfigList,
 		},
-		"connections/:connectionId/scope-configs/:id": {
+		"connections/:connectionId/scope-configs/:scopeConfigId": {
 			"PATCH":  api.UpdateScopeConfig,
 			"GET":    api.GetScopeConfig,
 			"DELETE": api.DeleteScopeConfig,
@@ -229,9 +230,8 @@ func EnrichOptions(taskCtx plugin.TaskContext,
 	op *tasks.JenkinsOptions,
 	apiClient *helper.ApiAsyncClient) errors.Error {
 	jenkinsJob := &models.JenkinsJob{}
-	// If this is from BpV200, we should set JobFullName to scopeId
 	if op.JobFullName == "" {
-		op.JobFullName = op.ScopeId
+		op.JobFullName = op.FullName
 	}
 	// validate the op and set name=owner/repo if this is from advanced mode or bpV100
 	op, err := tasks.ValidateTaskOptions(op)
@@ -253,7 +253,7 @@ func EnrichOptions(taskCtx plugin.TaskContext,
 	err = api.GetJob(apiClient, op.JobPath, op.JobName, op.JobFullName, 100, func(job *models.Job, isPath bool) errors.Error {
 		log.Debug(fmt.Sprintf("Current job: %s", job.FullName))
 		op.JobPath = job.Path
-		jenkinsJob := job.ConvertApiScope().(*models.JenkinsJob)
+		jenkinsJob := job.ToJenkinsJob()
 
 		jenkinsJob.ConnectionId = op.ConnectionId
 		jenkinsJob.ScopeConfigId = op.ScopeConfigId

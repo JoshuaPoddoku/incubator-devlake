@@ -15,34 +15,16 @@
  * limitations under the License.
  *
  */
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- */
 
 import { useEffect } from 'react';
-import { FormGroup, InputGroup } from '@blueprintjs/core';
+import { Input } from 'antd';
 
-import * as S from './styled';
+import { Block } from '@/components';
 
 interface Props {
   label?: string;
   subLabel?: string;
   placeholder?: string;
-  name: string;
   initialValue: string;
   value: string;
   error: string;
@@ -72,12 +54,13 @@ export const ConnectionUsername = ({
   };
 
   return (
-    <FormGroup
-      label={<S.Label>{label ?? 'Username'}</S.Label>}
-      labelInfo={<S.LabelInfo>*</S.LabelInfo>}
-      subLabel={subLabel ? <S.LabelDescription>{subLabel}</S.LabelDescription> : null}
-    >
-      <InputGroup placeholder={placeholder ?? 'Your Username'} value={value} onChange={handleChange} />
-    </FormGroup>
+    <Block title={label ?? 'Username'} description={subLabel ? subLabel : null} required>
+      <Input
+        style={{ width: 386 }}
+        placeholder={placeholder ?? 'Your Username'}
+        value={value}
+        onChange={handleChange}
+      />
+    </Block>
   );
 };

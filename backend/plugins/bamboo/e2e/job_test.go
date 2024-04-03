@@ -31,7 +31,7 @@ func TestBambooJobDataFlow(t *testing.T) {
 	var bamboo impl.Bamboo
 	dataflowTester := e2ehelper.NewDataFlowTester(t, "bamboo", bamboo)
 
-	taskData := &tasks.BambooTaskData{
+	taskData := &tasks.BambooOptions{
 		Options: &models.BambooOptions{
 			ConnectionId: 1,
 			PlanKey:      "TEST-PLA1",
@@ -40,10 +40,11 @@ func TestBambooJobDataFlow(t *testing.T) {
 				ProductionPattern: "(?i)compile",
 			},
 		},
+		ApiClient: getFakeAPIClient(),
 	}
 	// import raw data table
-	// SELECT * FROM _raw_bamboo_api_job INTO OUTFILE "/tmp/_raw_bamboo_api_job.csv" FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '"' LINES TERMINATED BY '\r\n';
-	dataflowTester.ImportCsvIntoRawTable("./raw_tables/_raw_bamboo_api_job.csv", "_raw_bamboo_api_job")
+	// SELECT * FROM _raw_bamboo_api_job INTO OUTFILE "/tmp/_raw_bamboo_api_jobs.csv" FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '"' LINES TERMINATED BY '\r\n';
+	dataflowTester.ImportCsvIntoRawTable("./raw_tables/_raw_bamboo_api_jobs.csv", "_raw_bamboo_api_jobs")
 
 	// verify extraction
 	dataflowTester.FlushTabler(&models.BambooJob{})

@@ -19,7 +19,6 @@ package tasks
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/apache/incubator-devlake/core/errors"
 	"github.com/apache/incubator-devlake/helpers/pluginhelper/api"
@@ -27,19 +26,17 @@ import (
 )
 
 type JiraOptions struct {
-	ConnectionId  uint64 `json:"connectionId"`
-	BoardId       uint64 `json:"boardId"`
-	TimeAfter     string
-	ScopeConfig   *models.JiraScopeConfig `json:"scopeConfig"`
-	ScopeId       string
-	ScopeConfigId uint64
-	PageSize      int
+	ConnectionId         uint64                  `json:"connectionId" mapstructure:"connectionId"`
+	BoardId              uint64                  `json:"boardId" mapstructure:"boardId"`
+	ScopeConfig          *models.JiraScopeConfig `json:"scopeConfig" mapstructure:"scopeConfig"`
+	ScopeConfigId        uint64                  `json:"scopeConfigId" mapstructure:"scopeConfigId"`
+	PageSize             int                     `json:"pageSize" mapstructure:"pageSize"`
+	api.CollectorOptions `mapstructure:",squash"`
 }
 
 type JiraTaskData struct {
 	Options        *JiraOptions
 	ApiClient      *api.ApiAsyncClient
-	TimeAfter      *time.Time
 	JiraServerInfo models.JiraServerInfo
 }
 

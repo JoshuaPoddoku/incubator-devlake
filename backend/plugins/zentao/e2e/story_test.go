@@ -37,7 +37,7 @@ func TestZentaoStoryDataFlow(t *testing.T) {
 		Options: &tasks.ZentaoOptions{
 			ConnectionId: 1,
 			ProjectId:    1,
-			ScopeConfigs: &tasks.ZentaoScopeConfigs{
+			ScopeConfig: &models.ZentaoScopeConfig{
 				TypeMappings: map[string]string{
 					"story.feature": "REQUIRE",
 				},
@@ -48,6 +48,7 @@ func TestZentaoStoryDataFlow(t *testing.T) {
 		},
 		Stories:      map[int64]struct{}{},
 		AccountCache: tasks.NewAccountCache(dataflowTester.Dal, 1),
+		ApiClient:    getFakeAPIClient(),
 	}
 
 	// import raw data table

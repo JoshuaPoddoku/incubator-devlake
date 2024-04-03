@@ -17,13 +17,13 @@
  */
 
 import { useEffect, useState } from 'react';
-import { InputGroup, Button, Intent } from '@blueprintjs/core';
+import { CloseOutlined, PlusOutlined } from '@ant-design/icons';
+import { Input, Button } from 'antd';
 import { useDebounce } from 'ahooks';
 
-import { IconButton } from '@/components';
+import API from '@/api';
 import { operator } from '@/utils';
 
-import * as API from '../api';
 import * as S from './styled';
 
 interface Props {
@@ -32,7 +32,7 @@ interface Props {
 }
 
 export const RemoteLink = ({ transformation, setTransformation }: Props) => {
-  const [index, setInedx] = useState(0);
+  const [index, setInedx] = useState<number>();
   const [pattern, setPattern] = useState('');
   const [error, setError] = useState('');
   const [links, setLinks] = useState<Array<{ pattern: string; regex: string }>>(
@@ -50,13 +50,13 @@ export const RemoteLink = ({ transformation, setTransformation }: Props) => {
   const debouncedPattern = useDebounce(pattern, { wait: 500 });
 
   const getRegex = async () => {
-    const [success, res] = await operator(() => API.generateRegex(pattern), {
+    const [success, res] = await operator(() => API.plugin.jira.generateRegex(pattern), {
       hideToast: true,
       setOperating: setGenerating,
     });
 
     if (success) {
-      setLinks(links.map((link, i) => (i === index ? res : link)));
+      setLinks(links.map((link, i) => (i === index ? { ...res, pattern } : link)));
     } else {
       setError(res?.response?.data?.message ?? '');
     }
@@ -83,7 +83,7 @@ export const RemoteLink = ({ transformation, setTransformation }: Props) => {
       {links.map((link, i) => (
         <div key={i} className="input">
           <div className="inner">
-            <InputGroup
+            <Input
               key={i}
               placeholder="E.g. https://gitlab.com/{namespace}/{repo_name}/-/commit/{commit_sha}"
               value={index === i ? pattern : link.pattern}
@@ -98,20 +98,20 @@ export const RemoteLink = ({ transformation, setTransformation }: Props) => {
               }}
             />
             {links.length > 1 && (
-              <IconButton loading={generating} icon="cross" tooltip="Delete" onClick={() => handleDeleteLink(i)} />
+              <Button
+                type="primary"
+                loading={generating}
+                icon={<CloseOutlined />}
+                onClick={() => handleDeleteLink(i)}
+              />
             )}
           </div>
           {index === i && error && <div className="error">{error}</div>}
         </div>
       ))}
-      <Button
-        outlined
-        loading={generating}
-        intent={Intent.PRIMARY}
-        icon="add"
-        text="Add a Pattern"
-        onClick={() => handleAddLink()}
-      />
+      <Button type="primary" loading={generating} icon={<PlusOutlined />} onClick={() => handleAddLink()}>
+        Add a Pattern
+      </Button>
     </S.RemoteLinkWrapper>
   );
 };

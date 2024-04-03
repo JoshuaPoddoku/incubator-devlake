@@ -18,24 +18,24 @@ limitations under the License.
 package tasks
 
 import (
+	"time"
+
 	"github.com/apache/incubator-devlake/core/errors"
 	helper "github.com/apache/incubator-devlake/helpers/pluginhelper/api"
-	"time"
 )
 
 type TeambitionOptions struct {
-	ConnectionId        uint64 `json:"connectionId"`
-	ProjectId           string `json:"projectId"`
-	PageSize            uint64 `mapstruct:"pageSize"`
-	TimeAfter           string `json:"timeAfter" mapstructure:"timeAfter,omitempty"`
-	CstZone             *time.Location
-	TransformationRules TransformationRules `json:"transformationRules"`
+	ConnectionId            uint64 `json:"connectionId"`
+	ProjectId               string `json:"projectId"`
+	PageSize                uint64 `mapstruct:"pageSize"`
+	CstZone                 *time.Location
+	TransformationRules     TransformationRules `json:"transformationRules"`
+	helper.CollectorOptions `mapstructure:",squash"`
 }
 
 type TeambitionTaskData struct {
 	Options   *TeambitionOptions
 	ApiClient *helper.ApiAsyncClient
-	TimeAfter *time.Time
 	TenantId  string
 }
 

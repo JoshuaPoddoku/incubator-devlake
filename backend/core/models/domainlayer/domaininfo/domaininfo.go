@@ -72,6 +72,7 @@ func GetDomainTablesInfo() []dal.Tabler {
 		&devops.CicdDeploymentCommit{},
 		&devops.CiCDPipelineCommit{},
 		&devops.CicdScope{},
+		&devops.CICDDeployment{},
 		// didgen no table
 		// ticket
 		&ticket.Board{},
@@ -86,5 +87,6 @@ func GetDomainTablesInfo() []dal.Tabler {
 		&ticket.SprintIssue{},
 		&ticket.IssueAssignee{},
 		&ticket.IssueRelationship{},
+		&ticket.IssueCustomArrayField{},
 	}
 }

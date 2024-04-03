@@ -42,7 +42,7 @@ type SimpleGitlabApiJob struct {
 }
 
 var CollectApiJobsMeta = plugin.SubTaskMeta{
-	Name:             "collectApiJobs",
+	Name:             "Collect Job Runs",
 	EntryPoint:       CollectApiJobs,
 	EnabledByDefault: true,
 	Description:      "Collect job data from gitlab api, supports both timeFilter and diffSync.",
@@ -55,7 +55,6 @@ func CollectApiJobs(taskCtx plugin.SubTaskContext) errors.Error {
 	collector, err := helper.NewStatefulApiCollectorForFinalizableEntity(helper.FinalizableApiCollectorArgs{
 		RawDataSubTaskArgs: *rawDataSubTaskArgs,
 		ApiClient:          data.ApiClient,
-		TimeAfter:          data.TimeAfter, // set to nil to disable timeFilter
 		CollectNewRecordsByList: helper.FinalizableApiCollectorListArgs{
 			PageSize:    100,
 			Concurrency: 10,

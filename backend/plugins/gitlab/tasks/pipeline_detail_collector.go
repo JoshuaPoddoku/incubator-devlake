@@ -35,7 +35,7 @@ func init() {
 const RAW_PIPELINE_DETAILS_TABLE = "gitlab_api_pipeline_details"
 
 var CollectApiPipelineDetailsMeta = plugin.SubTaskMeta{
-	Name:             "collectApiPipelineDetails",
+	Name:             "Collect Pipeline Details",
 	EntryPoint:       CollectApiPipelineDetails,
 	EnabledByDefault: true,
 	Description:      "Collect pipeline details data from gitlab api, supports both timeFilter and diffSync.",
@@ -45,7 +45,7 @@ var CollectApiPipelineDetailsMeta = plugin.SubTaskMeta{
 
 func CollectApiPipelineDetails(taskCtx plugin.SubTaskContext) errors.Error {
 	rawDataSubTaskArgs, data := CreateRawDataSubTaskArgs(taskCtx, RAW_PIPELINE_DETAILS_TABLE)
-	collectorWithState, err := helper.NewStatefulApiCollector(*rawDataSubTaskArgs, data.TimeAfter)
+	collectorWithState, err := helper.NewStatefulApiCollector(*rawDataSubTaskArgs)
 	if err != nil {
 		return err
 	}
@@ -54,8 +54,6 @@ func CollectApiPipelineDetails(taskCtx plugin.SubTaskContext) errors.Error {
 	if err != nil {
 		return err
 	}
-
-	incremental := collectorWithState.IsIncremental()
 
 	iterator, err := GetPipelinesIterator(taskCtx, collectorWithState)
 	if err != nil {
@@ -68,8 +66,7 @@ func CollectApiPipelineDetails(taskCtx plugin.SubTaskContext) errors.Error {
 		ApiClient:          data.ApiClient,
 		MinTickInterval:    &tickInterval,
 		Input:              iterator,
-		Incremental:        incremental,
-		UrlTemplate:        "projects/{{ .Params.ProjectId }}/pipelines/{{ .Input.GitlabId }}",
+		UrlTemplate:        "projects/{{ .Params.ProjectId }}/pipelines/{{ .Input.PipelineId }}",
 		Query: func(reqData *helper.RequestData) (url.Values, errors.Error) {
 			query := url.Values{}
 			query.Set("with_stats", "true")
@@ -89,15 +86,15 @@ func GetPipelinesIterator(taskCtx plugin.SubTaskContext, collectorWithState *hel
 	db := taskCtx.GetDal()
 	data := taskCtx.GetData().(*GitlabTaskData)
 	clauses := []dal.Clause{
-		dal.Select("gp.gitlab_id,gp.gitlab_id as iid"),
-		dal.From("_tool_gitlab_pipelines gp"),
+		dal.Select("gp.pipeline_id"),
+		dal.From("_tool_gitlab_pipeline_projects gp"),
 		dal.Where(
-			`gp.project_id = ? and gp.connection_id = ? and gp.is_detail_required = ?`,
-			data.Options.ProjectId, data.Options.ConnectionId, true,
+			`gp.project_id = ? and gp.connection_id = ?`,
+			data.Options.ProjectId, data.Options.ConnectionId,
 		),
 	}
-	if collectorWithState.LatestState.LatestSuccessStart != nil {
-		clauses = append(clauses, dal.Where("gitlab_updated_at > ?", *collectorWithState.LatestState.LatestSuccessStart))
+	if collectorWithState.Since != nil && collectorWithState.IsIncremental {
+		clauses = append(clauses, dal.Where("gitlab_updated_at > ?", *collectorWithState.Since))
 	}
 	// construct the input iterator
 	cursor, err := db.Cursor(clauses...)
@@ -105,5 +102,9 @@ func GetPipelinesIterator(taskCtx plugin.SubTaskContext, collectorWithState *hel
 		return nil, err
 	}
 
-	return helper.NewDalCursorIterator(db, cursor, reflect.TypeOf(GitlabInput{}))
+	return helper.NewDalCursorIterator(db, cursor, reflect.TypeOf(PipelineInput{}))
+}
+
+type PipelineInput struct {
+	PipelineId int
 }

@@ -34,14 +34,13 @@ import (
 	"github.com/apache/incubator-devlake/core/models/domainlayer/ticket"
 	plugin "github.com/apache/incubator-devlake/core/plugin"
 	"github.com/apache/incubator-devlake/helpers/pluginhelper/api"
-	aha "github.com/apache/incubator-devlake/helpers/pluginhelper/api/apihelperabstract"
 	"github.com/apache/incubator-devlake/plugins/bitbucket/models"
 )
 
 const RAW_REPOSITORIES_TABLE = "bitbucket_api_repositories"
 
 var ConvertRepoMeta = plugin.SubTaskMeta{
-	Name:             "convertRepo",
+	Name:             "Convert Repos",
 	EntryPoint:       ConvertRepo,
 	EnabledByDefault: true,
 	Description:      "Convert tool layer table bitbucket_repos into  domain layer table repos and boards",
@@ -52,7 +51,7 @@ type ApiRepoResponse models.BitbucketApiRepo
 
 func GetApiRepo(
 	op *BitbucketOptions,
-	apiClient aha.ApiClientAbstract,
+	apiClient plugin.ApiClient,
 ) (*models.BitbucketApiRepo, errors.Error) {
 	res, err := apiClient.Get(path.Join("repositories", op.FullName), nil, nil)
 	if err != nil {
